@@ -1,6 +1,9 @@
 # Main game file that handles game initialization, input, and the game loop
 import tcod
 import numpy as np
+import pickle
+import os
+from datetime import datetime
 from core.map import Map
 from utils.constants import *
 from rendering.renderer import Renderer
@@ -14,7 +17,97 @@ class Game:
         self.current_level = 0  # Start at level 0 (outdoor level)
         self.player_x = self.width // 2  # Initial player X position
         self.player_y = self.height // 2  # Initial player Y position
+        self.player_positions = {}  # Store player positions for each level
         self.initialize_level(self.current_level)  # Set up the first level
+
+    def save_game(self):
+        """Save the current game state to a file"""
+        # Create saves directory if it doesn't exist
+        os.makedirs("saves", exist_ok=True)
+        
+        # Create a timestamp for the save file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = f"saves/save_{timestamp}.sav"
+        
+        # Prepare save data
+        save_data = {
+            'width': self.width,
+            'height': self.height,
+            'current_level': self.current_level,
+            'player_x': self.player_x,
+            'player_y': self.player_y,
+            'player_positions': self.player_positions,
+            'levels': {}  # We'll save level data separately
+        }
+        
+        # Save each level's data
+        for level_num, level in self.levels.items():
+            save_data['levels'][level_num] = {
+                'tiles': level.tiles,
+                'visible': level.visible,
+                'explored': level.explored,
+                'stairs_up': level.stairs_up,
+                'stairs_down': level.stairs_down,
+                'stairs_discovered': level.stairs_discovered,
+                'is_outdoor': level.is_outdoor,
+                'spawn_point': level.spawn_point
+            }
+        
+        # Save to file
+        try:
+            with open(save_path, 'wb') as f:
+                pickle.dump(save_data, f)
+            return True, f"Game saved to {save_path}"
+        except Exception as e:
+            return False, f"Failed to save game: {str(e)}"
+
+    def load_game(self, save_path):
+        """Load a game state from a file"""
+        try:
+            with open(save_path, 'rb') as f:
+                save_data = pickle.load(f)
+            
+            # Restore basic game state
+            self.width = save_data['width']
+            self.height = save_data['height']
+            self.current_level = save_data['current_level']
+            self.player_x = save_data['player_x']
+            self.player_y = save_data['player_y']
+            self.player_positions = save_data['player_positions']
+            
+            # Restore levels
+            self.levels = {}
+            for level_num, level_data in save_data['levels'].items():
+                level = Map(self.width, self.height, int(level_num))
+                level.tiles = level_data['tiles']
+                level.visible = level_data['visible']
+                level.explored = level_data['explored']
+                level.stairs_up = level_data['stairs_up']
+                level.stairs_down = level_data['stairs_down']
+                level.stairs_discovered = level_data['stairs_discovered']
+                level.is_outdoor = level_data['is_outdoor']
+                level.spawn_point = level_data['spawn_point']
+                self.levels[int(level_num)] = level
+            
+            # Update FOV for current position
+            self.levels[self.current_level].update_fov(self.player_x, self.player_y)
+            return True, "Game loaded successfully"
+        except Exception as e:
+            return False, f"Failed to load game: {str(e)}"
+
+    def list_saves(self):
+        """List all available save files"""
+        if not os.path.exists("saves"):
+            return []
+        
+        saves = []
+        for filename in os.listdir("saves"):
+            if filename.endswith(".sav"):
+                save_path = os.path.join("saves", filename)
+                timestamp = filename[5:-4]  # Remove 'save_' prefix and '.sav' suffix
+                saves.append((save_path, timestamp))
+        
+        return sorted(saves, key=lambda x: x[1], reverse=True)  # Sort by timestamp, newest first
 
     def initialize_level(self, level):
         """Initialize a new level and place the player appropriately"""
@@ -22,17 +115,49 @@ class Game:
         if level not in self.levels:
             self.levels[level] = Map(self.width, self.height, level)
         
-        # Place player at appropriate position based on level type
-        if level == 0:  # Outdoor level - use spawn point
-            if self.levels[level].spawn_point:
-                self.player_x, self.player_y = self.levels[level].spawn_point
-        elif level > 0 and self.levels[level].stairs_up:  # Dungeon level with up stairs
-            self.player_x, self.player_y = self.levels[level].stairs_up
-        elif level < MAX_LEVELS - 1 and self.levels[level].stairs_down:  # Dungeon level with down stairs
-            self.player_x, self.player_y = self.levels[level].stairs_down
-        else:  # Fallback to center if no special position
-            self.player_x = self.width // 2
-            self.player_y = self.height // 2
+        # Check if we have a stored position for this level
+        if level in self.player_positions:
+            # Restore the stored position
+            self.player_x, self.player_y = self.player_positions[level]
+        else:
+            # Place player at appropriate position based on level type and transition
+            if level == 0:  # Outdoor level
+                if self.levels[level].spawn_point:
+                    self.player_x, self.player_y = self.levels[level].spawn_point
+                else:
+                    # Find a walkable position near the center
+                    center_x, center_y = self.width // 2, self.height // 2
+                    for dx in range(-5, 6):
+                        for dy in range(-5, 6):
+                            x, y = center_x + dx, center_y + dy
+                            if self.levels[level].is_walkable(x, y):
+                                self.player_x, self.player_y = x, y
+                                break
+            else:  # Dungeon level
+                # If coming from above (down stairs), place near up stairs
+                if level > 0 and self.levels[level].stairs_up:
+                    self.player_x, self.player_y = self.levels[level].stairs_up
+                    # Move one tile away from stairs if possible
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        new_x, new_y = self.player_x + dx, self.player_y + dy
+                        if self.levels[level].is_walkable(new_x, new_y):
+                            self.player_x, self.player_y = new_x, new_y
+                            break
+                # If coming from below (up stairs), place near down stairs
+                elif level < MAX_LEVELS - 1 and self.levels[level].stairs_down:
+                    self.player_x, self.player_y = self.levels[level].stairs_down
+                    # Move one tile away from stairs if possible
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        new_x, new_y = self.player_x + dx, self.player_y + dy
+                        if self.levels[level].is_walkable(new_x, new_y):
+                            self.player_x, self.player_y = new_x, new_y
+                            break
+
+        # Store the current position for this level
+        self.player_positions[level] = (self.player_x, self.player_y)
+
+        # Update field of view for the new position
+        self.levels[level].update_fov(self.player_x, self.player_y)
 
     def handle_input(self, event):
         """Handle player input and return False if game should quit"""
@@ -43,6 +168,18 @@ class Game:
             # Handle escape key
             if event.sym == tcod.event.KeySym.ESCAPE:
                 return False
+            
+            # Handle save/load keys
+            if event.sym == tcod.event.KeySym.s:  # Save game
+                success, message = self.save_game()
+                print(message)  # You might want to show this in the game UI
+                return True
+            elif event.sym == tcod.event.KeySym.l:  # Load game
+                saves = self.list_saves()
+                if saves:
+                    success, message = self.load_game(saves[0][0])  # Load most recent save
+                    print(message)  # You might want to show this in the game UI
+                return True
 
             # Handle movement keys
             # Arrow keys and numpad for 8-directional movement
@@ -77,15 +214,21 @@ class Game:
         # Check for stairs and handle level transitions
         stairs = self.levels[self.current_level].is_stairs(new_x, new_y)
         if stairs == "up" and self.current_level > 0:
+            # Store current position before level transition
+            self.player_positions[self.current_level] = (self.player_x, self.player_y)
             self.current_level -= 1  # Go up one level
             self.initialize_level(self.current_level)
         elif stairs == "down" and self.current_level < MAX_LEVELS - 1:
+            # Store current position before level transition
+            self.player_positions[self.current_level] = (self.player_x, self.player_y)
             self.current_level += 1  # Go down one level
             self.initialize_level(self.current_level)
         else:
             # Normal movement
             self.player_x = new_x
             self.player_y = new_y
+            # Update stored position
+            self.player_positions[self.current_level] = (self.player_x, self.player_y)
 
         # Update field of view after movement
         self.levels[self.current_level].update_fov(self.player_x, self.player_y)
