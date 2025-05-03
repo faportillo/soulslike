@@ -2,11 +2,39 @@
 import tcod
 from utils.colors import *
 from core.map import *
+from .map_renderer import MapRenderer
+from .entity_renderer import EntityRenderer
+from .ui_renderer import UIRenderer
 
 class Renderer:
     def __init__(self, console):
-        """Initialize the renderer with a console"""
+        """Initialize the main renderer with all sub-renderers"""
         self.console = console
+        self.map_renderer = MapRenderer(console)
+        self.entity_renderer = EntityRenderer(console)
+        self.ui_renderer = UIRenderer(console)
+
+    def render_all(self, game_map, player, entities, level, messages=None):
+        """Render everything in the game"""
+        # Clear the console
+        self.console.clear()
+
+        # Render the map and its features
+        self.map_renderer.render_map(game_map, player.x, player.y)
+        self.map_renderer.render_stairs(game_map)
+
+        # Render all entities
+        self.entity_renderer.render_entities(entities)
+        self.entity_renderer.render_player(player.x, player.y)
+
+        # Render UI elements
+        self.ui_renderer.render_level(level)
+        if messages:
+            self.ui_renderer.render_messages(messages)
+        self.ui_renderer.render_status(player)
+
+        # Present the console
+        self.console.present()
 
     def render_map(self, game_map, player_x, player_y):
         """Render the game map with proper colors based on visibility"""
