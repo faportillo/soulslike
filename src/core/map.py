@@ -120,6 +120,59 @@ class Map:
         self.explored.fill(True)
         self.stairs_discovered["down"] = True
 
+    def path_exists(self, start, end):
+        """Check if a path exists between two points using breadth-first search"""
+        visited = set()
+        queue = [(start, [start])]
+        while queue:
+            (x, y), path = queue.pop(0)
+            if (x, y) == end:
+                return True
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                next_x, next_y = x + dx, y + dy
+                if (0 <= next_x < self.width and 0 <= next_y < self.height and
+                    self.is_walkable(next_x, next_y) and
+                    (next_x, next_y) not in visited):
+                    visited.add((next_x, next_y))
+                    queue.append(((next_x, next_y), path + [(next_x, next_y)]))
+        return False
+
+    def create_direct_path(self, start, end):
+        """Create a direct path between two points with clear areas around stairs"""
+        x1, y1 = start
+        x2, y2 = end
+
+        # Clear a 3-tile radius around both stair positions
+        for dx in range(-3, 4):
+            for dy in range(-3, 4):
+                # Clear around start point
+                if 0 <= x1 + dx < self.width and 0 <= y1 + dy < self.height:
+                    self.tiles[x1 + dx, y1 + dy] = TERRAIN_GRASS
+                # Clear around end point
+                if 0 <= x2 + dx < self.width and 0 <= y2 + dy < self.height:
+                    self.tiles[x2 + dx, y2 + dy] = TERRAIN_GRASS
+
+        # Create L-shaped path
+        if random.random() < 0.5:
+            # Horizontal then vertical
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                self.tiles[x, y1] = TERRAIN_GRASS
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                self.tiles[x2, y] = TERRAIN_GRASS
+        else:
+            # Vertical then horizontal
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                self.tiles[x1, y] = TERRAIN_GRASS
+            for x in range(min(x1, x2), max(x1, x2) + 1):
+                self.tiles[x, y2] = TERRAIN_GRASS
+
+    def ensure_clear_stair_area(self, x, y):
+        """Ensure a 3-tile radius around a position is clear"""
+        for dx in range(-3, 4):
+            for dy in range(-3, 4):
+                if 0 <= x + dx < self.width and 0 <= y + dy < self.height:
+                    self.tiles[x + dx, y + dy] = TERRAIN_GRASS
+
     def generate_dungeon(self):
         """Generate a dungeon level with multiple rooms and corridors"""
         # Initialize the map with walls
@@ -131,15 +184,38 @@ class Map:
         min_room_size = 5
         max_room_size = 12
 
-        # Define room types with their probabilities
-        room_types = {
-            'normal': 0.4,    # Regular room
-            'water': 0.15,    # Water pool room
-            'sand': 0.15,     # Sandy room
-            'rocky': 0.15,    # Rocky room
-            'crystal': 0.1,   # Crystal formation room
-            'mossy': 0.05    # Mossy room
+        # Define room types with their probabilities, adjusted by level
+        base_room_types = {
+            'normal': 0.3,     # Regular room
+            'water': 0.1,      # Water pool room
+            'sand': 0.1,       # Sandy room
+            'rocky': 0.1,      # Rocky room
+            'crystal': 0.1,    # Crystal formation room
+            'mossy': 0.05,    # Mossy room
+            'lava': 0.05,     # Lava room (deeper levels)
+            'fungal': 0.05,   # Fungal growth room
+            'bone': 0.05,     # Bone room
+            'treasure': 0.05,  # Treasure room
+            'ritual': 0.05    # Ritual room
         }
+
+        # Adjust probabilities based on level
+        level_factor = min(1.0, self.level / 5.0)  # Increases with depth
+        room_types = base_room_types.copy()
+        
+        # Increase chances of special rooms in deeper levels
+        if self.level > 3:
+            room_types['lava'] = 0.15
+            room_types['crystal'] = 0.15
+            room_types['ritual'] = 0.1
+        if self.level > 6:
+            room_types['bone'] = 0.15
+            room_types['fungal'] = 0.15
+            room_types['treasure'] = 0.1
+
+        # Normalize probabilities
+        total = sum(room_types.values())
+        room_types = {k: v/total for k, v in room_types.items()}
 
         for _ in range(num_rooms):
             # Try to place a room
@@ -199,6 +275,37 @@ class Map:
                         elif new_room['type'] == 'mossy':
                             # Create a mossy room with scattered rocks and grass
                             if random.random() < 0.15:  # 15% chance for rocks
+                                self.tiles[x, y] = TERRAIN_ROCK
+                            else:
+                                self.tiles[x, y] = TERRAIN_GRASS
+                        elif new_room['type'] == 'lava':
+                            # Create a lava room (represented as water for now)
+                            if (x == room_x or x == room_x + room_width - 1 or
+                                y == room_y or y == room_y + room_height - 1):
+                                self.tiles[x, y] = TERRAIN_GRASS
+                            else:
+                                self.tiles[x, y] = TERRAIN_WATER
+                        elif new_room['type'] == 'fungal':
+                            # Create a fungal growth room
+                            if random.random() < 0.4:  # 40% chance for fungal growth
+                                self.tiles[x, y] = TERRAIN_ROCK
+                            else:
+                                self.tiles[x, y] = TERRAIN_GRASS
+                        elif new_room['type'] == 'bone':
+                            # Create a bone room
+                            if random.random() < 0.25:  # 25% chance for bones
+                                self.tiles[x, y] = TERRAIN_ROCK
+                            else:
+                                self.tiles[x, y] = TERRAIN_SAND
+                        elif new_room['type'] == 'treasure':
+                            # Create a treasure room with scattered rocks
+                            if random.random() < 0.1:  # 10% chance for rocks
+                                self.tiles[x, y] = TERRAIN_ROCK
+                            else:
+                                self.tiles[x, y] = TERRAIN_GRASS
+                        elif new_room['type'] == 'ritual':
+                            # Create a ritual room with a special pattern
+                            if (x - room_x) % 3 == 0 and (y - room_y) % 3 == 0:
                                 self.tiles[x, y] = TERRAIN_ROCK
                             else:
                                 self.tiles[x, y] = TERRAIN_GRASS
@@ -265,7 +372,7 @@ class Map:
             y = random.randint(1, self.height - 2)
             if self.tiles[x, y] == TERRAIN_GRASS:
                 # Create a small water pool with varying shapes
-                pool_shape = random.choice(['square', 'cross', 'plus'])
+                pool_shape = random.choice(['square', 'cross', 'plus', 'diamond', 'zigzag'])
                 if pool_shape == 'square':
                     # 2x2 water pool
                     for dx in range(2):
@@ -277,11 +384,21 @@ class Map:
                     for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]:
                         if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
                             self.tiles[x + dx, y + dy] = TERRAIN_WATER
-                else:  # plus
+                elif pool_shape == 'plus':
                     # Plus-shaped water pool
                     for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]:
                         if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
                             self.tiles[x + dx, y + dy] = TERRAIN_WATER
+                elif pool_shape == 'diamond':
+                    # Diamond-shaped water pool
+                    for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)]:
+                        if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
+                            self.tiles[x + dx, y + dy] = TERRAIN_WATER
+                else:  # zigzag
+                    # Zigzag water pool
+                    for i in range(3):
+                        if 0 < x + i < self.width - 1:
+                            self.tiles[x + i, y + (i % 2)] = TERRAIN_WATER
 
         # Add some sand patches in corridors
         for _ in range(random.randint(2, 4)):
@@ -289,7 +406,7 @@ class Map:
             y = random.randint(1, self.height - 2)
             if self.tiles[x, y] == TERRAIN_GRASS:
                 # Create a small sand patch with varying shapes
-                patch_shape = random.choice(['square', 'cross', 'plus'])
+                patch_shape = random.choice(['square', 'cross', 'plus', 'diamond', 'zigzag'])
                 if patch_shape == 'square':
                     # 2x2 sand patch
                     for dx in range(2):
@@ -301,11 +418,21 @@ class Map:
                     for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]:
                         if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
                             self.tiles[x + dx, y + dy] = TERRAIN_SAND
-                else:  # plus
+                elif patch_shape == 'plus':
                     # Plus-shaped sand patch
                     for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]:
                         if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
                             self.tiles[x + dx, y + dy] = TERRAIN_SAND
+                elif patch_shape == 'diamond':
+                    # Diamond-shaped sand patch
+                    for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1)]:
+                        if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
+                            self.tiles[x + dx, y + dy] = TERRAIN_SAND
+                else:  # zigzag
+                    # Zigzag sand patch
+                    for i in range(3):
+                        if 0 < x + i < self.width - 1:
+                            self.tiles[x + i, y + (i % 2)] = TERRAIN_SAND
 
         # Add some crystal formations
         for _ in range(random.randint(2, 4)):
@@ -313,14 +440,14 @@ class Map:
             y = random.randint(1, self.height - 2)
             if self.tiles[x, y] == TERRAIN_GRASS:
                 # Create a crystal formation with varying shapes
-                crystal_shape = random.choice(['single', 'cluster', 'line'])
+                crystal_shape = random.choice(['single', 'cluster', 'line', 'spiral', 'star'])
                 if crystal_shape == 'single':
                     self.tiles[x, y] = TERRAIN_ROCK
                 elif crystal_shape == 'cluster':
                     for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]:
                         if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
                             self.tiles[x + dx, y + dy] = TERRAIN_ROCK
-                else:  # line
+                elif crystal_shape == 'line':
                     direction = random.choice(['horizontal', 'vertical'])
                     length = random.randint(2, 4)
                     for i in range(length):
@@ -330,6 +457,17 @@ class Map:
                         else:
                             if 0 < y + i < self.height - 1:
                                 self.tiles[x, y + i] = TERRAIN_ROCK
+                elif crystal_shape == 'spiral':
+                    # Create a spiral pattern
+                    for i in range(4):
+                        for j in range(i + 1):
+                            if 0 < x + j < self.width - 1 and 0 < y + i < self.height - 1:
+                                self.tiles[x + j, y + i] = TERRAIN_ROCK
+                else:  # star
+                    # Create a star pattern
+                    for dx, dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)]:
+                        if 0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1:
+                            self.tiles[x + dx, y + dy] = TERRAIN_ROCK
 
         # Place stairs based on level
         if self.level > 0:  # Not the first level
@@ -342,6 +480,13 @@ class Map:
                         x, y = room['center_x'] + dx, room['center_y'] + dy
                         if self.is_walkable(x, y):
                             self.stairs_up = (x, y)
+                            # Ensure clear area around stairs
+                            self.ensure_clear_stair_area(x, y)
+                            # Add special features around stairs (outside the clear area)
+                            for sx, sy in [(0, 4), (4, 0), (0, -4), (-4, 0)]:
+                                if 0 < x + sx < self.width - 1 and 0 < y + sy < self.height - 1:
+                                    if random.random() < 0.3:  # 30% chance for decorative features
+                                        self.tiles[x + sx, y + sy] = TERRAIN_ROCK
                             break
                     if self.stairs_up:
                         break
@@ -356,9 +501,22 @@ class Map:
                         x, y = room['center_x'] + dx, room['center_y'] + dy
                         if self.is_walkable(x, y):
                             self.stairs_down = (x, y)
+                            # Ensure clear area around stairs
+                            self.ensure_clear_stair_area(x, y)
+                            # Add special features around stairs (outside the clear area)
+                            for sx, sy in [(0, 4), (4, 0), (0, -4), (-4, 0)]:
+                                if 0 < x + sx < self.width - 1 and 0 < y + sy < self.height - 1:
+                                    if random.random() < 0.3:  # 30% chance for decorative features
+                                        self.tiles[x + sx, y + sy] = TERRAIN_ROCK
                             break
                     if self.stairs_down:
                         break
+
+        # Ensure there's a path between stairs
+        if self.stairs_up and self.stairs_down:
+            if not self.path_exists(self.stairs_up, self.stairs_down):
+                # Create a direct path between stairs
+                self.create_direct_path(self.stairs_up, self.stairs_down)
 
     def is_stairs(self, x, y):
         """Check if a position contains stairs and mark them as discovered"""

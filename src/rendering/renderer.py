@@ -66,13 +66,21 @@ class Renderer:
                     # Indoor level colors
                     if terrain == 0:  # Wall
                         color = COLOR_WALL if is_visible else COLOR_DARK_WALL
-                    else:  # Floor
+                    elif terrain == 1:  # Grass/Floor
                         color = COLOR_FLOOR if is_visible else COLOR_DARK_FLOOR
+                    elif terrain == 2:  # Rock
+                        color = (100, 100, 100) if is_visible else (50, 50, 50)  # Gray
+                    elif terrain == 3:  # Cave
+                        color = (139, 69, 19) if is_visible else (69, 34, 9)  # Brown
+                    elif terrain == 4:  # Water
+                        color = (0, 105, 148) if is_visible else (0, 52, 74)  # Deep blue
+                    elif terrain == 5:  # Sand
+                        color = (238, 214, 175) if is_visible else (119, 107, 87)  # Sand color
 
                 # Choose character based on terrain type
                 if terrain == 0:  # Wall
                     char = "#"
-                elif terrain == 1:  # Grass
+                elif terrain == 1:  # Grass/Floor
                     char = "."
                 elif terrain == 2:  # Rock
                     char = "O"
@@ -95,17 +103,17 @@ class Renderer:
             return COLOR_DARK_WALL, " "
 
         if terrain == TERRAIN_WALL:
-            return COLOR_OUTDOOR_WALL, "#"  # Trees
+            return (34, 139, 34), "#"  # Forest green for trees
         elif terrain == TERRAIN_GRASS:
-            return COLOR_OUTDOOR_GROUND, "."
+            return (34, 139, 34), "."  # Green for grass
         elif terrain == TERRAIN_ROCK:
-            return COLOR_ROCK, "o"
+            return (169, 169, 169), "o"  # Dark gray for rocks
         elif terrain == TERRAIN_CAVE:
-            return COLOR_CAVE, "O"
+            return (139, 69, 19), "O"  # Brown for cave
         elif terrain == TERRAIN_WATER:
-            return COLOR_WATER, "~"
+            return (0, 105, 148), "~"  # Deep blue for water
         elif terrain == TERRAIN_SAND:
-            return COLOR_SAND, ","
+            return (238, 214, 175), ","  # Sand color
         else:
             return COLOR_DARK_WALL, " "
 
@@ -115,9 +123,17 @@ class Renderer:
             return COLOR_DARK_WALL, " "
 
         if terrain == TERRAIN_WALL:
-            return COLOR_WALL, "#"
+            return (50, 50, 50), "#"  # Dark gray for walls
         elif terrain == TERRAIN_GRASS:  # Used as floor in dungeon
-            return COLOR_FLOOR, "."
+            return (100, 100, 100), "."  # Light gray for floor
+        elif terrain == TERRAIN_ROCK:
+            return (169, 169, 169), "O"  # Dark gray for rocks
+        elif terrain == TERRAIN_CAVE:
+            return (139, 69, 19), "C"  # Brown for cave
+        elif terrain == TERRAIN_WATER:
+            return (0, 105, 148), "~"  # Deep blue for water
+        elif terrain == TERRAIN_SAND:
+            return (238, 214, 175), ","  # Sand color
         else:
             return COLOR_DARK_WALL, " "
 
@@ -127,17 +143,22 @@ class Renderer:
         if game_map.stairs_up:
             x, y = game_map.stairs_up
             if game_map.visible[x, y]:
-                self.console.print(x, y, "^", fg=COLOR_STAIRS)
+                self.console.print(x, y, "^", fg=(255, 215, 0))  # Gold color for visible stairs
             elif game_map.stairs_discovered["up"]:
-                self.console.print(x, y, "^", fg=COLOR_DARK_STAIRS)
+                self.console.print(x, y, "^", fg=(128, 107, 0))  # Dark gold for discovered stairs
 
         # Render down stairs
         if game_map.stairs_down:
             x, y = game_map.stairs_down
             if game_map.visible[x, y]:
-                self.console.print(x, y, "v", fg=COLOR_STAIRS)
+                self.console.print(x, y, "v", fg=(255, 215, 0))  # Gold color for visible stairs
             elif game_map.stairs_discovered["down"]:
-                self.console.print(x, y, "v", fg=COLOR_DARK_STAIRS)
+                self.console.print(x, y, "v", fg=(128, 107, 0))  # Dark gold for discovered stairs
+
+        # Ensure there's a path between stairs
+        if game_map.stairs_up and game_map.stairs_down:
+            if not game_map.path_exists(game_map.stairs_up, game_map.stairs_down):
+                game_map.create_direct_path(game_map.stairs_up, game_map.stairs_down)
 
     def render_player(self, player_x, player_y):
         """Render the player character"""
