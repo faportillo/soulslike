@@ -36,6 +36,60 @@ class Renderer:
         # Present the console
         self.console.present()
 
+    def get_terrain_color(self, terrain, is_visible, is_outdoor, level=0):
+        """Get the appropriate color for terrain based on type, visibility, and level"""
+        # Base colors for different terrain types
+        base_colors = {
+            TERRAIN_WALL: {
+                'outdoor': (34, 139, 34),    # Forest green
+                'indoor': (50, 50, 50),      # Dark gray
+                'deep': (25, 25, 25)         # Very dark gray
+            },
+            TERRAIN_GRASS: {
+                'outdoor': (34, 139, 34),    # Forest green
+                'indoor': (100, 100, 100),   # Light gray
+                'deep': (80, 80, 80)         # Darker gray
+            },
+            TERRAIN_ROCK: {
+                'outdoor': (169, 169, 169),  # Dark gray
+                'indoor': (169, 169, 169),   # Dark gray
+                'deep': (139, 69, 19)        # Brown
+            },
+            TERRAIN_CAVE: {
+                'outdoor': (139, 69, 19),    # Brown
+                'indoor': (139, 69, 19),     # Brown
+                'deep': (101, 67, 33)        # Dark brown
+            },
+            TERRAIN_WATER: {
+                'outdoor': (0, 105, 148),    # Deep blue
+                'indoor': (0, 105, 148),     # Deep blue
+                'deep': (0, 0, 139)          # Dark blue
+            },
+            TERRAIN_SAND: {
+                'outdoor': (238, 214, 175),  # Sand
+                'indoor': (238, 214, 175),   # Sand
+                'deep': (205, 133, 63)       # Peru
+            }
+        }
+
+        # Get the base color
+        if is_outdoor:
+            base = base_colors[terrain]['outdoor']
+        elif level > 6:
+            base = base_colors[terrain]['deep']
+        else:
+            base = base_colors[terrain]['indoor']
+
+        # Apply visibility modifier
+        if not is_visible:
+            # Darken the color for unexplored areas
+            return tuple(max(0, c // 3) for c in base)
+        elif not is_outdoor and level > 0:
+            # Add a slight tint based on level
+            tint = min(30, level * 5)  # Maximum tint of 30
+            return tuple(min(255, c + tint) for c in base)
+        return base
+
     def render_map(self, game_map, player_x, player_y):
         """Render the game map with proper colors based on visibility"""
         for x in range(game_map.width):
@@ -47,35 +101,8 @@ class Renderer:
                 is_visible = game_map.visible[x, y]
                 is_explored = game_map.explored[x, y]
 
-                # Choose color based on terrain type and visibility
-                if game_map.is_outdoor:
-                    # Outdoor level colors
-                    if terrain == 0:  # Wall
-                        color = COLOR_OUTDOOR_WALL
-                    elif terrain == 1:  # Grass
-                        color = COLOR_OUTDOOR_GROUND
-                    elif terrain == 2:  # Rock
-                        color = COLOR_ROCK
-                    elif terrain == 3:  # Cave
-                        color = COLOR_CAVE
-                    elif terrain == 4:  # Water
-                        color = COLOR_WATER
-                    elif terrain == 5:  # Sand
-                        color = COLOR_SAND
-                else:
-                    # Indoor level colors
-                    if terrain == 0:  # Wall
-                        color = COLOR_WALL if is_visible else COLOR_DARK_WALL
-                    elif terrain == 1:  # Grass/Floor
-                        color = COLOR_FLOOR if is_visible else COLOR_DARK_FLOOR
-                    elif terrain == 2:  # Rock
-                        color = (100, 100, 100) if is_visible else (50, 50, 50)  # Gray
-                    elif terrain == 3:  # Cave
-                        color = (139, 69, 19) if is_visible else (69, 34, 9)  # Brown
-                    elif terrain == 4:  # Water
-                        color = (0, 105, 148) if is_visible else (0, 52, 74)  # Deep blue
-                    elif terrain == 5:  # Sand
-                        color = (238, 214, 175) if is_visible else (119, 107, 87)  # Sand color
+                # Get the color based on terrain type, visibility, and level
+                color = self.get_terrain_color(terrain, is_visible, game_map.is_outdoor, game_map.level)
 
                 # Choose character based on terrain type
                 if terrain == 0:  # Wall
@@ -117,43 +144,54 @@ class Renderer:
         else:
             return COLOR_DARK_WALL, " "
 
-    def get_dungeon_tile(self, terrain, visible):
+    def get_dungeon_tile(self, terrain, visible, level=0):
         """Get the appropriate color and character for dungeon terrain"""
         if not visible:
             return COLOR_DARK_WALL, " "
 
+        # Get the color based on terrain type, visibility, and level
+        color = self.get_terrain_color(terrain, visible, False, level)
+
         if terrain == TERRAIN_WALL:
-            return (50, 50, 50), "#"  # Dark gray for walls
+            return color, "#"  # Walls
         elif terrain == TERRAIN_GRASS:  # Used as floor in dungeon
-            return (100, 100, 100), "."  # Light gray for floor
+            return color, "."  # Floor
         elif terrain == TERRAIN_ROCK:
-            return (169, 169, 169), "O"  # Dark gray for rocks
+            return color, "O"  # Rocks
         elif terrain == TERRAIN_CAVE:
-            return (139, 69, 19), "C"  # Brown for cave
+            return color, "C"  # Cave
         elif terrain == TERRAIN_WATER:
-            return (0, 105, 148), "~"  # Deep blue for water
+            return color, "~"  # Water
         elif terrain == TERRAIN_SAND:
-            return (238, 214, 175), ","  # Sand color
+            return color, ","  # Sand
         else:
             return COLOR_DARK_WALL, " "
 
     def render_stairs(self, game_map):
-        """Render the stairs with proper colors based on discovery"""
+        """Render the stairs with proper colors based on discovery and level"""
+        # Get stair colors based on level
+        if game_map.level > 6:
+            visible_color = (255, 140, 0)  # Dark orange for deep levels
+            discovered_color = (139, 69, 19)  # Brown for discovered in deep levels
+        else:
+            visible_color = (255, 215, 0)  # Gold for normal levels
+            discovered_color = (128, 107, 0)  # Dark gold for discovered
+
         # Render up stairs
         if game_map.stairs_up:
             x, y = game_map.stairs_up
             if game_map.visible[x, y]:
-                self.console.print(x, y, "^", fg=(255, 215, 0))  # Gold color for visible stairs
+                self.console.print(x, y, "^", fg=visible_color)
             elif game_map.stairs_discovered["up"]:
-                self.console.print(x, y, "^", fg=(128, 107, 0))  # Dark gold for discovered stairs
+                self.console.print(x, y, "^", fg=discovered_color)
 
         # Render down stairs
         if game_map.stairs_down:
             x, y = game_map.stairs_down
             if game_map.visible[x, y]:
-                self.console.print(x, y, "v", fg=(255, 215, 0))  # Gold color for visible stairs
+                self.console.print(x, y, "v", fg=visible_color)
             elif game_map.stairs_discovered["down"]:
-                self.console.print(x, y, "v", fg=(128, 107, 0))  # Dark gold for discovered stairs
+                self.console.print(x, y, "v", fg=discovered_color)
 
         # Ensure there's a path between stairs
         if game_map.stairs_up and game_map.stairs_down:
