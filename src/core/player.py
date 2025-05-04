@@ -1,6 +1,22 @@
 from core.entity import Entity
 from core.status_effect import StatusEffect, EffectType
 from utils.colors import COLOR_PLAYER
+from enum import Enum
+import random
+
+class Attribute(Enum):
+    STRENGTH = "Strength"
+    DEXTERITY = "Dexterity"
+    VITALITY = "Vitality"
+    INTELLIGENCE = "Intelligence"
+    FAITH = "Faith"
+
+class Skill(Enum):
+    SWORD_MASTERY = "Sword Mastery"
+    SHIELD_BLOCK = "Shield Block"
+    EVASION = "Evasion"
+    SPELLCASTING = "Spellcasting"
+    HEALING = "Healing"
 
 class Player(Entity):
     def __init__(self, x, y):
@@ -11,15 +27,36 @@ class Player(Entity):
             char="@",
             color=COLOR_PLAYER
         )
-        # Health attributes
-        self.hp = 100
-        self.max_hp = 100
-        self.base_hp_regen = 1  # HP regenerated per turn
-        self.hp_regen_cooldown = 0  # Cooldown for HP regeneration
+        # Core attributes
+        self.attributes = {
+            Attribute.STRENGTH: 10,
+            Attribute.DEXTERITY: 10,
+            Attribute.VITALITY: 10,
+            Attribute.INTELLIGENCE: 10,
+            Attribute.FAITH: 10
+        }
         
-        # Combat attributes
-        self.defense = 10
-        self.damage_reduction = 0.1  # 10% damage reduction
+        # Skills and their levels
+        self.skills = {
+            Skill.SWORD_MASTERY: 1,
+            Skill.SHIELD_BLOCK: 1,
+            Skill.EVASION: 1,
+            Skill.SPELLCASTING: 1,
+            Skill.HEALING: 1
+        }
+        
+        # Health attributes (now based on VITALITY)
+        self.max_hp = self.calculate_max_hp()
+        self.hp = self.max_hp
+        self.base_hp_regen = self.calculate_hp_regen()
+        self.hp_regen_cooldown = 0
+        
+        # Combat attributes (now based on attributes)
+        self.defense = self.calculate_defense()
+        self.damage_reduction = self.calculate_damage_reduction()
+        self.attack_power = self.calculate_attack_power()
+        self.critical_chance = self.calculate_critical_chance()
+        self.dodge_chance = self.calculate_dodge_chance()
         
         # Status effects
         self.status_effects = []
@@ -29,11 +66,58 @@ class Player(Entity):
         self.level = 1
         self.experience = 0
         self.experience_to_level = 100
-
+        self.attribute_points = 0
+        self.skill_points = 0
+        
         # Inventory
         self.inventory = []
         self.max_inventory_size = 10
         self.selected_item_index = 0
+
+    def calculate_max_hp(self):
+        """Calculate max HP based on VITALITY"""
+        base_hp = 100
+        vitality_bonus = self.attributes[Attribute.VITALITY] * 10
+        return base_hp + vitality_bonus
+
+    def calculate_hp_regen(self):
+        """Calculate HP regeneration based on VITALITY"""
+        base_regen = 1
+        vitality_bonus = self.attributes[Attribute.VITALITY] * 0.2
+        return base_regen + vitality_bonus
+
+    def calculate_defense(self):
+        """Calculate defense based on attributes and skills"""
+        base_defense = 10
+        vitality_bonus = self.attributes[Attribute.VITALITY] * 2
+        shield_bonus = self.skills[Skill.SHIELD_BLOCK] * 3
+        return base_defense + vitality_bonus + shield_bonus
+
+    def calculate_damage_reduction(self):
+        """Calculate damage reduction based on defense"""
+        base_reduction = 0.1
+        defense_bonus = self.defense * 0.005
+        return min(0.75, base_reduction + defense_bonus)  # Cap at 75%
+
+    def calculate_attack_power(self):
+        """Calculate attack power based on STRENGTH and skills"""
+        base_power = 10
+        strength_bonus = self.attributes[Attribute.STRENGTH] * 2
+        sword_bonus = self.skills[Skill.SWORD_MASTERY] * 3
+        return base_power + strength_bonus + sword_bonus
+
+    def calculate_critical_chance(self):
+        """Calculate critical hit chance based on DEXTERITY"""
+        base_chance = 0.05
+        dexterity_bonus = self.attributes[Attribute.DEXTERITY] * 0.005
+        return min(0.5, base_chance + dexterity_bonus)  # Cap at 50%
+
+    def calculate_dodge_chance(self):
+        """Calculate dodge chance based on DEXTERITY and EVASION skill"""
+        base_chance = 0.05
+        dexterity_bonus = self.attributes[Attribute.DEXTERITY] * 0.003
+        evasion_bonus = self.skills[Skill.EVASION] * 0.02
+        return min(0.4, base_chance + dexterity_bonus + evasion_bonus)  # Cap at 40%
 
     def update(self):
         """Update player state each turn"""
@@ -53,6 +137,10 @@ class Player(Entity):
 
     def take_damage(self, amount, damage_type="physical"):
         """Take damage with damage type consideration"""
+        # Check for dodge
+        if random.random() < self.dodge_chance:
+            return False  # Dodged the attack
+        
         # Apply damage reduction
         reduced_amount = amount * (1 - self.damage_reduction)
         
@@ -68,19 +156,23 @@ class Player(Entity):
         self.hp = max(0, self.hp - int(reduced_amount))
         
         # Set HP regeneration cooldown
-        self.hp_regen_cooldown = 3  # 3 turns before HP regen starts
+        self.hp_regen_cooldown = 3
         
         # Check if player died
         if self.hp == 0:
             self.is_alive = False
-            return True  # Player died
-        return False  # Player survived
+            return True
+        return False
 
     def heal(self, amount):
         """Heal the player by the given amount"""
+        # Apply healing bonus from FAITH
+        faith_bonus = 1 + (self.attributes[Attribute.FAITH] * 0.05)
+        healing_amount = amount * faith_bonus
+        
         old_hp = self.hp
-        self.hp = min(self.max_hp, self.hp + amount)
-        return self.hp - old_hp  # Return actual amount healed
+        self.hp = min(self.max_hp, self.hp + healing_amount)
+        return self.hp - old_hp
 
     def add_status_effect(self, effect_type, duration, magnitude=1):
         """Add a status effect to the player"""
@@ -112,12 +204,69 @@ class Player(Entity):
         self.experience -= self.experience_to_level
         self.experience_to_level = int(self.experience_to_level * 1.5)
         
-        # Increase stats
-        self.max_hp += 15
+        # Grant attribute and skill points
+        self.attribute_points += 2
+        self.skill_points += 1
+        
+        # Update derived stats
+        self.max_hp = self.calculate_max_hp()
         self.hp = self.max_hp
-        self.defense += 2
-        self.damage_reduction += 0.02  # Increase damage reduction by 2%
-        self.base_hp_regen += 0.5  # Increase HP regeneration
+        self.base_hp_regen = self.calculate_hp_regen()
+        self.defense = self.calculate_defense()
+        self.damage_reduction = self.calculate_damage_reduction()
+        self.attack_power = self.calculate_attack_power()
+        self.critical_chance = self.calculate_critical_chance()
+        self.dodge_chance = self.calculate_dodge_chance()
+
+    def increase_attribute(self, attribute):
+        """Increase an attribute if points are available"""
+        if self.attribute_points > 0 and attribute in self.attributes:
+            self.attributes[attribute] += 1
+            self.attribute_points -= 1
+            
+            # Update derived stats
+            self.max_hp = self.calculate_max_hp()
+            self.base_hp_regen = self.calculate_hp_regen()
+            self.defense = self.calculate_defense()
+            self.damage_reduction = self.calculate_damage_reduction()
+            self.attack_power = self.calculate_attack_power()
+            self.critical_chance = self.calculate_critical_chance()
+            self.dodge_chance = self.calculate_dodge_chance()
+            return True
+        return False
+
+    def increase_skill(self, skill):
+        """Increase a skill if points are available"""
+        if self.skill_points > 0 and skill in self.skills:
+            self.skills[skill] += 1
+            self.skill_points -= 1
+            
+            # Update derived stats
+            self.defense = self.calculate_defense()
+            self.attack_power = self.calculate_attack_power()
+            self.dodge_chance = self.calculate_dodge_chance()
+            return True
+        return False
+
+    def get_attribute_modifier(self, attribute):
+        """Get the modifier for an attribute (used for skill checks)"""
+        value = self.attributes[attribute]
+        return (value - 10) // 2
+
+    def get_skill_level(self, skill):
+        """Get the effective level of a skill including attribute modifiers"""
+        base_level = self.skills[skill]
+        if skill == Skill.SWORD_MASTERY:
+            return base_level + self.get_attribute_modifier(Attribute.STRENGTH)
+        elif skill == Skill.SHIELD_BLOCK:
+            return base_level + self.get_attribute_modifier(Attribute.VITALITY)
+        elif skill == Skill.EVASION:
+            return base_level + self.get_attribute_modifier(Attribute.DEXTERITY)
+        elif skill == Skill.SPELLCASTING:
+            return base_level + self.get_attribute_modifier(Attribute.INTELLIGENCE)
+        elif skill == Skill.HEALING:
+            return base_level + self.get_attribute_modifier(Attribute.FAITH)
+        return base_level
 
     def get_status_effects(self):
         """Get a list of active status effects"""
