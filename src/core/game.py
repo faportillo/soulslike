@@ -181,10 +181,10 @@ class Game:
         self.levels[level].update_fov(self.player.x, self.player.y)
 
     def handle_input(self, event):
-        """Handle player input and return False if game should quit"""
+        """Handle player input and return False if game should quit, 'menu' if should return to menu"""
         # Handle quit events
         if isinstance(event, tcod.event.Quit):
-            return False
+            return 'menu'
         elif isinstance(event, tcod.event.KeyDown):
             # Handle escape key
             if event.sym == tcod.event.KeySym.ESCAPE:
@@ -196,7 +196,7 @@ class Game:
             
             # Handle quit key when paused
             if self.is_paused and event.sym == tcod.event.KeySym.q:
-                return False
+                return 'menu'
             
             # If game is paused, ignore other inputs
             if self.is_paused:
