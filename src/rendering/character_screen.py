@@ -152,4 +152,7 @@ class CharacterScreenRenderer:
             self.y + self.height - 1,
             help_text,
             fg=COLOR_WHITE
-        ) 
+        )
+
+        # Present the console
+        tcod.console_flush() 

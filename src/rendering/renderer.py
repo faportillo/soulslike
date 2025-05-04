@@ -3,6 +3,7 @@ import tcod
 from utils.colors import *
 from .map_renderer import MapRenderer
 from .ui_renderer import UIRenderer
+from .character_screen import CharacterScreenRenderer
 
 class Renderer:
     def __init__(self, console):
@@ -10,6 +11,7 @@ class Renderer:
         self.console = console
         self.map_renderer = MapRenderer(console)
         self.ui_renderer = UIRenderer(console)
+        self.character_screen = CharacterScreenRenderer(console)
 
     def render_all(self, game, player, game_map):
         """Render everything in the game"""
@@ -33,6 +35,13 @@ class Renderer:
 
         # Render UI
         self.ui_renderer.render_ui(game, player, current_map)
+
+        # Render character screen if it's visible
+        if game.show_character_screen:
+            self.character_screen.render(player)
+
+        # Present the console
+        tcod.console_flush()
 
     def get_terrain_color(self, terrain, is_visible, is_outdoor, level=0):
         """Get the appropriate color for terrain based on type, visibility, and level"""

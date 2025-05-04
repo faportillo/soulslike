@@ -109,6 +109,15 @@ def main():
                         return
                     continue
                 
+                # Handle character screen toggle
+                if event.sym == tcod.event.KeySym.c:
+                    game.show_character_screen = not game.show_character_screen
+                    continue
+                
+                # If character screen is open, ignore other inputs
+                if game.show_character_screen:
+                    continue
+                
                 # Handle movement keys when not paused
                 if event.sym == tcod.event.KeySym.UP or event.sym == tcod.event.KeySym.KP_8:
                     game.try_move(0, -1)  # Move up
