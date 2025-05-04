@@ -27,6 +27,7 @@ class Map:
         self.stairs_discovered = {"up": False, "down": False}  # Track discovered stairs
         self.is_outdoor = level == 0  # First level is outdoor
         self.spawn_point = None  # Player spawn point for outdoor level
+        self.save_point = None  # Save point for the level
         self.generate()  # Generate the map
 
     def generate(self):
@@ -37,54 +38,66 @@ class Map:
             self.generate_dungeon()
 
     def generate_outdoor(self):
-        """Generate an outdoor map with full illumination"""
+        """Generate an outdoor map with natural features"""
         # Create a large open area with grass
         for x in range(1, self.width - 1):
             for y in range(1, self.height - 1):
                 self.tiles[x, y] = TERRAIN_GRASS
 
-        # Add trees around the edges
-        for x in range(self.width):
-            for y in range(self.height):
-                if x == 0 or x == self.width - 1 or y == 0 or y == self.height - 1:
-                    self.tiles[x, y] = TERRAIN_WALL
+        # Add some random water features
+        num_water_features = random.randint(3, 6)
+        for _ in range(num_water_features):
+            water_x = random.randint(5, self.width - 6)
+            water_y = random.randint(5, self.height - 6)
+            water_size = random.randint(3, 6)
+            for dx in range(-water_size, water_size + 1):
+                for dy in range(-water_size, water_size + 1):
+                    if (0 < water_x + dx < self.width - 1 and 
+                        0 < water_y + dy < self.height - 1 and
+                        dx*dx + dy*dy <= water_size*water_size):
+                        self.tiles[water_x + dx, water_y + dy] = TERRAIN_WATER
 
         # Add some random rock formations
-        rock_positions = []  # Store positions of rock formations
-        for _ in range(8):  # Increased number of rock formations
-            rock_x = random.randint(2, self.width - 3)
-            rock_y = random.randint(2, self.height - 3)
-            rock_size = random.randint(3, 6)  # Larger rock formations
-            rock_positions.append((rock_x, rock_y))  # Store center of rock formation
+        num_rocks = random.randint(5, 10)
+        for _ in range(num_rocks):
+            rock_x = random.randint(5, self.width - 6)
+            rock_y = random.randint(5, self.height - 6)
+            rock_size = random.randint(2, 4)
             for dx in range(-rock_size, rock_size + 1):
                 for dy in range(-rock_size, rock_size + 1):
-                    if 0 < rock_x + dx < self.width - 1 and 0 < rock_y + dy < self.height - 1:
-                        if random.random() < 0.7:  # 70% chance to place rock
-                            self.tiles[rock_x + dx, rock_y + dy] = TERRAIN_ROCK
+                    if (0 < rock_x + dx < self.width - 1 and 
+                        0 < rock_y + dy < self.height - 1 and
+                        dx*dx + dy*dy <= rock_size*rock_size):
+                        self.tiles[rock_x + dx, rock_y + dy] = TERRAIN_ROCK
 
-        # Add a larger lake
-        lake_x = random.randint(10, self.width - 20)
-        lake_y = random.randint(10, self.height - 20)
-        lake_size = random.randint(5, 8)  # Larger lake
-        for dx in range(-lake_size, lake_size + 1):
-            for dy in range(-lake_size, lake_size + 1):
-                if 0 < lake_x + dx < self.width - 1 and 0 < lake_y + dy < self.height - 1:
-                    if dx*dx + dy*dy <= lake_size*lake_size:  # Circular lake
-                        self.tiles[lake_x + dx, lake_y + dy] = TERRAIN_WATER
-
-        # Add sand around the lake
-        for dx in range(-lake_size-2, lake_size + 3):
-            for dy in range(-lake_size-2, lake_size + 3):
-                if 0 < lake_x + dx < self.width - 1 and 0 < lake_y + dy < self.height - 1:
-                    if dx*dx + dy*dy <= (lake_size+2)*(lake_size+2):
-                        if self.tiles[lake_x + dx, lake_y + dy] == TERRAIN_GRASS:
-                            self.tiles[lake_x + dx, lake_y + dy] = TERRAIN_SAND
+        # Place a save point in a safe location
+        save_placed = False
+        max_attempts = 100
+        for _ in range(max_attempts):
+            save_x = random.randint(5, self.width - 6)
+            save_y = random.randint(5, self.height - 6)
+            if self.is_walkable(save_x, save_y):
+                self.save_point = (save_x, save_y)
+                save_placed = True
+                break
+        
+        if not save_placed:
+            # If no suitable location found, place near the center
+            center_x = self.width // 2
+            center_y = self.height // 2
+            for dx in range(-5, 6):
+                for dy in range(-5, 6):
+                    if self.is_walkable(center_x + dx, center_y + dy):
+                        self.save_point = (center_x + dx, center_y + dy)
+                        break
+                if self.save_point:
+                    break
 
         # Find a suitable cave entrance location next to a rock formation
         cave_placed = False
         cave_x = None
         cave_y = None
-        for rock_x, rock_y in rock_positions:
+        for rock_x, rock_y in [(rock_x, rock_y) for _ in range(num_rocks)]:
             if cave_placed:
                 break
             # Try each direction around the rock formation
@@ -624,3 +637,11 @@ class Map:
         self.visible = fov_map.fov.T
         self.explored |= self.visible  # Mark visible tiles as explored
         self.check_stairs_discovery()  # Check for discovered stairs 
+
+    def is_save_point(self, x, y):
+        """Check if the given coordinates are a save point"""
+        return self.save_point and (x, y) == self.save_point
+
+    def get_save_point(self):
+        """Get the current save point coordinates"""
+        return self.save_point 

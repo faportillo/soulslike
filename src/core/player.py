@@ -51,6 +51,12 @@ class Player(Entity):
         self.base_hp_regen = self.calculate_hp_regen()
         self.hp_regen_cooldown = 0
         
+        # Stamina attributes (based on DEXTERITY)
+        self.max_stamina = self.calculate_max_stamina()
+        self.stamina = self.max_stamina
+        self.stamina_regen = self.calculate_stamina_regen()
+        self.stamina_regen_cooldown = 0
+        
         # Combat attributes (now based on attributes)
         self.defense = self.calculate_defense()
         self.damage_reduction = self.calculate_damage_reduction()
@@ -86,6 +92,18 @@ class Player(Entity):
         vitality_bonus = self.attributes[Attribute.VITALITY] * 0.2
         return base_regen + vitality_bonus
 
+    def calculate_max_stamina(self):
+        """Calculate max stamina based on DEXTERITY"""
+        base_stamina = 100
+        dexterity_bonus = self.attributes[Attribute.DEXTERITY] * 5
+        return base_stamina + dexterity_bonus
+
+    def calculate_stamina_regen(self):
+        """Calculate stamina regeneration rate based on DEXTERITY"""
+        base_regen = 1
+        dexterity_bonus = self.attributes[Attribute.DEXTERITY] * 0.2
+        return base_regen + dexterity_bonus
+
     def calculate_defense(self):
         """Calculate defense based on attributes and skills"""
         base_defense = 10
@@ -120,20 +138,28 @@ class Player(Entity):
         return min(0.4, base_chance + dexterity_bonus + evasion_bonus)  # Cap at 40%
 
     def update(self):
-        """Update player state each turn"""
-        # Update status effects
-        self.status_effects = [effect for effect in self.status_effects if effect.update()]
-        for effect in self.status_effects:
-            effect.apply_effect(self)
-        
-        # Handle HP regeneration
+        """Update player state"""
+        # Update health regeneration
         if self.hp_regen_cooldown > 0:
             self.hp_regen_cooldown -= 1
         elif self.hp < self.max_hp:
-            self.heal(self.base_hp_regen)
-        
-        # Reset stun status
-        self.is_stunned = False
+            self.hp = min(self.max_hp, self.hp + self.base_hp_regen)
+            self.hp_regen_cooldown = 10  # 10 frames cooldown
+
+        # Update stamina regeneration
+        if self.stamina_regen_cooldown > 0:
+            self.stamina_regen_cooldown -= 1
+        elif self.stamina < self.max_stamina:
+            self.stamina = min(self.max_stamina, self.stamina + self.stamina_regen)
+            self.stamina_regen_cooldown = 5  # 5 frames cooldown
+
+        # Update status effects
+        for effect in self.status_effects[:]:
+            effect.duration -= 1
+            if effect.duration <= 0:
+                self.status_effects.remove(effect)
+                if effect.effect_type == "STUNNED":
+                    self.is_stunned = False
 
     def take_damage(self, amount, damage_type="physical"):
         """Take damage with damage type consideration"""

@@ -11,7 +11,7 @@ class PauseScreenRenderer:
         self.y = (console.height - self.height) // 2
 
     def render(self):
-        """Render the pause screen"""
+        """Render the pause menu"""
         # Draw the background
         for x in range(self.width):
             for y in range(self.height):
@@ -48,8 +48,9 @@ class PauseScreenRenderer:
 
         # Draw menu options
         options = [
-            "Press ESC to resume",
-            "Press Q to quit"
+            "1. Resume Game",
+            "2. Return to Main Menu",
+            "3. Quit Game"
         ]
         
         for i, option in enumerate(options):

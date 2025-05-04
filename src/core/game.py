@@ -19,6 +19,10 @@ class Game:
         self.player = None  # Will be initialized in initialize_level
         self.show_character_screen = False  # Track if character screen is visible
         self.is_paused = False  # Track if game is paused
+        self.last_save_point = None  # Store the last save point coordinates
+        self.last_save_level = None  # Store the level of the last save point
+        self.message = None  # Store the current message to display
+        self.message_timer = 0  # Timer for message display
         self.initialize_level(self.current_level)  # Set up the first level
 
     def save_game(self):
@@ -211,17 +215,16 @@ class Game:
             if self.show_character_screen:
                 return True
             
-            # Handle save/load keys
-            if event.sym == tcod.event.KeySym.s:  # Save game
-                success, message = self.save_game()
-                print(message)  # You might want to show this in the game UI
-                return True
-            elif event.sym == tcod.event.KeySym.l:  # Load game
-                saves = self.list_saves()
-                if saves:
-                    success, message = self.load_game(saves[0][0])  # Load most recent save
-                    print(message)  # You might want to show this in the game UI
-                return True
+            # Handle save point interaction
+            if event.sym == tcod.event.KeySym.SPACE:
+                current_map = self.levels[self.current_level]
+                if current_map.is_save_point(self.player.x, self.player.y):
+                    success, message = self.save_game()
+                    self.last_save_point = (self.player.x, self.player.y)
+                    self.last_save_level = self.current_level
+                    self.message = "Game saved!"
+                    self.message_timer = 60  # Show message for 60 frames
+                    return True
 
             # Handle movement keys
             # Arrow keys and numpad for 8-directional movement
@@ -300,6 +303,34 @@ class Game:
         
         # Update player state
         self.player.update()
+
+    def respawn_player(self):
+        """Respawn the player at the last save point"""
+        if self.last_save_point and self.last_save_level is not None:
+            # Change to the saved level if needed
+            if self.current_level != self.last_save_level:
+                self.current_level = self.last_save_level
+                self.initialize_level(self.current_level)
+            
+            # Move player to save point
+            self.player.x, self.player.y = self.last_save_point
+            self.player.hp = self.player.max_hp  # Restore health
+            self.levels[self.current_level].update_fov(self.player.x, self.player.y)
+        else:
+            # If no save point, use the level's spawn point
+            self.initialize_level(self.current_level)
+
+    def update(self):
+        """Update game state"""
+        # Update message timer
+        if self.message_timer > 0:
+            self.message_timer -= 1
+            if self.message_timer == 0:
+                self.message = None
+
+        # Check if player is dead and respawn if needed
+        if not self.player.is_alive:
+            self.respawn_player()
 
 def main():
     # Initialize the game window and console

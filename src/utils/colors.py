@@ -39,6 +39,8 @@ COLOR_RED = (255, 0, 0)
 COLOR_GREEN = (0, 255, 0)
 COLOR_BLUE = (0, 0, 255)
 COLOR_YELLOW = (255, 255, 0)
+COLOR_CYAN = (0, 255, 255)
+COLOR_MAGENTA = (255, 0, 255)
 COLOR_ORANGE = (255, 165, 0)
 COLOR_GRAY = (128, 128, 128)
 
@@ -60,4 +62,8 @@ COLOR_SAND = (238, 214, 175)          # Sand color
 
 # UI colors
 COLOR_STAIRS = (255, 215, 0)          # Gold for stairs
-COLOR_DARK_STAIRS = (128, 107, 0)     # Dark gold for discovered stairs 
+COLOR_DARK_STAIRS = (128, 107, 0)     # Dark gold for discovered stairs
+COLOR_HEALTH = (255, 0, 0)  # Red for health
+COLOR_STAMINA = (0, 255, 0)  # Green for stamina
+COLOR_MESSAGE = (255, 255, 255)  # White for messages
+COLOR_PLAYER = (255, 255, 0)  # Yellow for player 

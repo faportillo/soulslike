@@ -6,42 +6,50 @@ class UIRenderer:
         """Initialize the UI renderer with a console"""
         self.console = console
 
+    def render_ui(self, game, player, game_map):
+        """Render all UI elements"""
+        # Render level
+        self.render_level(game_map.level)
+        
+        # Render status
+        self.render_status(player)
+        
+        # Render messages
+        if game.message:
+            self.render_messages([game.message])
+
     def render_level(self, level):
         """Render the current level number"""
-        self.console.print(0, 0, f"Level: {level}", fg=COLOR_WHITE)
+        level_text = f"Level: {level}"
+        self.console.print(0, 0, level_text, fg=COLOR_WHITE)
 
     def render_status(self, player):
         """Render player status information"""
-        # Render health bar
-        health_percent = player.hp / player.max_hp
-        bar_width = 20
-        filled_width = int(bar_width * health_percent)
-        
-        # Health bar background
-        for x in range(bar_width):
-            self.console.print(x, 1, " ", bg=COLOR_DARK_RED)
-        
-        # Health bar fill
-        for x in range(filled_width):
-            color = COLOR_RED if health_percent < 0.3 else COLOR_GREEN
-            self.console.print(x, 1, " ", bg=color)
-        
-        # Health text
+        # Health bar
         health_text = f"HP: {player.hp}/{player.max_hp}"
-        self.console.print(0, 2, health_text, fg=COLOR_WHITE)
+        self.console.print(0, 1, health_text, fg=COLOR_HEALTH)
         
-        # Defense and damage reduction
-        defense_text = f"DEF: {player.defense} ({int(player.damage_reduction * 100)}%)"
-        self.console.print(len(health_text) + 2, 2, defense_text, fg=COLOR_WHITE)
+        # Stamina bar
+        stamina_text = f"SP: {player.stamina}/{player.max_stamina}"
+        self.console.print(0, 2, stamina_text, fg=COLOR_STAMINA)
+
+    def render_messages(self, messages):
+        """Render game messages"""
+        if not messages:
+            return
+
+        # Get the last message
+        message = messages[-1]
         
-        # Status effects
-        if player.status_effects:
-            status_y = 3
-            for effect_name, duration in player.get_status_effects():
-                effect_text = f"{effect_name}: {duration}"
-                color = self._get_effect_color(effect_name)
-                self.console.print(0, status_y, effect_text, fg=color)
-                status_y += 1
+        # Calculate position (bottom of screen)
+        y = self.console.height - 1
+        
+        # Clear the message line
+        for x in range(self.console.width):
+            self.console.print(x, y, " ", fg=COLOR_WHITE)
+        
+        # Print the message
+        self.console.print(0, y, message, fg=COLOR_MESSAGE)
 
     def _get_effect_color(self, effect_name):
         """Get the appropriate color for a status effect"""
@@ -52,9 +60,4 @@ class UIRenderer:
             "BURNING": COLOR_ORANGE,
             "STUNNED": COLOR_YELLOW
         }
-        return colors.get(effect_name, COLOR_WHITE)
-
-    def render_messages(self, messages, y_offset=1):
-        """Render game messages"""
-        for i, message in enumerate(messages):
-            self.console.print(0, y_offset + i, message, fg=COLOR_WHITE) 
+        return colors.get(effect_name, COLOR_WHITE) 
