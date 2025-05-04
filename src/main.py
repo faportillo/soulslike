@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
+import os
+import sys
 import tcod
+
+# Add the src directory to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from core.game import Game
 from rendering.renderer import Renderer
 
@@ -27,10 +33,13 @@ def main():
         console.clear()
 
         # Render all game elements
-        renderer.render_map(game.levels[game.current_level], game.player_x, game.player_y)
-        renderer.render_stairs(game.levels[game.current_level])
-        renderer.render_player(game.player_x, game.player_y)
-        renderer.render_level(game.current_level)
+        renderer.render_all(
+            game_map=game.levels[game.current_level],
+            player=game.player,
+            entities=[],  # Add entities when implemented
+            level=game.current_level,
+            messages=[]  # Add messages when implemented
+        )
 
         # Display the rendered frame
         context.present(console)

@@ -5,6 +5,7 @@ import pickle
 import os
 from datetime import datetime
 from core.map import Map
+from core.player import Player
 from utils.constants import *
 from rendering.renderer import Renderer
 
@@ -15,9 +16,7 @@ class Game:
         self.height = 50  # Height of the game window in tiles
         self.levels = {}  # Dictionary to store all game levels
         self.current_level = 0  # Start at level 0 (outdoor level)
-        self.player_x = self.width // 2  # Initial player X position
-        self.player_y = self.height // 2  # Initial player Y position
-        self.player_positions = {}  # Store player positions for each level
+        self.player = None  # Will be initialized in initialize_level
         self.initialize_level(self.current_level)  # Set up the first level
 
     def save_game(self):
@@ -34,9 +33,17 @@ class Game:
             'width': self.width,
             'height': self.height,
             'current_level': self.current_level,
-            'player_x': self.player_x,
-            'player_y': self.player_y,
-            'player_positions': self.player_positions,
+            'player': {
+                'x': self.player.x,
+                'y': self.player.y,
+                'hp': self.player.hp,
+                'max_hp': self.player.max_hp,
+                'defense': self.player.defense,
+                'level': self.player.level,
+                'experience': self.player.experience,
+                'experience_to_level': self.player.experience_to_level,
+                'inventory': [(item.item_type.value, item.x, item.y) for item in self.player.inventory]
+            },
             'levels': {}  # We'll save level data separately
         }
         
@@ -71,9 +78,16 @@ class Game:
             self.width = save_data['width']
             self.height = save_data['height']
             self.current_level = save_data['current_level']
-            self.player_x = save_data['player_x']
-            self.player_y = save_data['player_y']
-            self.player_positions = save_data['player_positions']
+            
+            # Restore player data
+            player_data = save_data['player']
+            self.player = Player(player_data['x'], player_data['y'])
+            self.player.hp = player_data['hp']
+            self.player.max_hp = player_data['max_hp']
+            self.player.defense = player_data['defense']
+            self.player.level = player_data['level']
+            self.player.experience = player_data['experience']
+            self.player.experience_to_level = player_data['experience_to_level']
             
             # Restore levels
             self.levels = {}
@@ -90,7 +104,7 @@ class Game:
                 self.levels[int(level_num)] = level
             
             # Update FOV for current position
-            self.levels[self.current_level].update_fov(self.player_x, self.player_y)
+            self.levels[self.current_level].update_fov(self.player.x, self.player.y)
             return True, "Game loaded successfully"
         except Exception as e:
             return False, f"Failed to load game: {str(e)}"
@@ -115,49 +129,54 @@ class Game:
         if level not in self.levels:
             self.levels[level] = Map(self.width, self.height, level)
         
-        # Check if we have a stored position for this level
-        if level in self.player_positions:
-            # Restore the stored position
-            self.player_x, self.player_y = self.player_positions[level]
-        else:
-            # Place player at appropriate position based on level type and transition
-            if level == 0:  # Outdoor level
-                if self.levels[level].spawn_point:
-                    self.player_x, self.player_y = self.levels[level].spawn_point
-                else:
-                    # Find a walkable position near the center
-                    center_x, center_y = self.width // 2, self.height // 2
-                    for dx in range(-5, 6):
-                        for dy in range(-5, 6):
-                            x, y = center_x + dx, center_y + dy
-                            if self.levels[level].is_walkable(x, y):
-                                self.player_x, self.player_y = x, y
-                                break
-            else:  # Dungeon level
-                # If coming from above (down stairs), place near up stairs
-                if level > 0 and self.levels[level].stairs_up:
-                    self.player_x, self.player_y = self.levels[level].stairs_up
-                    # Move one tile away from stairs if possible
-                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                        new_x, new_y = self.player_x + dx, self.player_y + dy
-                        if self.levels[level].is_walkable(new_x, new_y):
-                            self.player_x, self.player_y = new_x, new_y
+        # Initialize player if not exists
+        if self.player is None:
+            self.player = Player(self.width // 2, self.height // 2)
+        
+        # Place player at appropriate position based on level type and transition
+        if level == 0:  # Outdoor level
+            if self.levels[level].spawn_point:
+                self.player.x, self.player.y = self.levels[level].spawn_point
+            else:
+                # Find a walkable position near the center
+                center_x, center_y = self.width // 2, self.height // 2
+                for dx in range(-5, 6):
+                    for dy in range(-5, 6):
+                        x, y = center_x + dx, center_y + dy
+                        if self.levels[level].is_walkable(x, y):
+                            self.player.x, self.player.y = x, y
                             break
-                # If coming from below (up stairs), place near down stairs
-                elif level < MAX_LEVELS - 1 and self.levels[level].stairs_down:
-                    self.player_x, self.player_y = self.levels[level].stairs_down
-                    # Move one tile away from stairs if possible
-                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                        new_x, new_y = self.player_x + dx, self.player_y + dy
-                        if self.levels[level].is_walkable(new_x, new_y):
-                            self.player_x, self.player_y = new_x, new_y
+        else:  # Dungeon level
+            # If coming from above (down stairs), place near up stairs
+            if level > 0 and self.levels[level].stairs_up:
+                self.player.x, self.player.y = self.levels[level].stairs_up
+                # Move one tile away from stairs if possible
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    new_x, new_y = self.player.x + dx, self.player.y + dy
+                    if self.levels[level].is_walkable(new_x, new_y):
+                        self.player.x, self.player.y = new_x, new_y
+                        break
+            # If coming from below (up stairs), place near down stairs
+            elif level < MAX_LEVELS - 1 and self.levels[level].stairs_down:
+                self.player.x, self.player.y = self.levels[level].stairs_down
+                # Move one tile away from stairs if possible
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    new_x, new_y = self.player.x + dx, self.player.y + dy
+                    if self.levels[level].is_walkable(new_x, new_y):
+                        self.player.x, self.player.y = new_x, new_y
+                        break
+            else:
+                # If no stairs are available, find a walkable position near the center
+                center_x, center_y = self.width // 2, self.height // 2
+                for dx in range(-5, 6):
+                    for dy in range(-5, 6):
+                        x, y = center_x + dx, center_y + dy
+                        if self.levels[level].is_walkable(x, y):
+                            self.player.x, self.player.y = x, y
                             break
-
-        # Store the current position for this level
-        self.player_positions[level] = (self.player_x, self.player_y)
 
         # Update field of view for the new position
-        self.levels[level].update_fov(self.player_x, self.player_y)
+        self.levels[level].update_fov(self.player.x, self.player.y)
 
     def handle_input(self, event):
         """Handle player input and return False if game should quit"""
@@ -200,12 +219,19 @@ class Game:
             elif event.sym == tcod.event.KeySym.KP_3:
                 self.try_move(1, 1)   # Move down-right
 
+            # Handle inventory keys
+            elif event.sym == tcod.event.KeySym.i:  # Inventory
+                self.player.select_next_item()
+            elif event.sym == tcod.event.KeySym.u:  # Use item
+                result = self.player.use_selected_item()
+                print(result)  # You might want to show this in the game UI
+
         return True
 
     def try_move(self, dx, dy):
         """Try to move the player and handle level transitions"""
-        new_x = self.player_x + dx
-        new_y = self.player_y + dy
+        new_x = self.player.x + dx
+        new_y = self.player.y + dy
 
         # Check if the new position is walkable
         if not self.levels[self.current_level].is_walkable(new_x, new_y):
@@ -214,24 +240,43 @@ class Game:
         # Check for stairs and handle level transitions
         stairs = self.levels[self.current_level].is_stairs(new_x, new_y)
         if stairs == "up" and self.current_level > 0:
-            # Store current position before level transition
-            self.player_positions[self.current_level] = (self.player_x, self.player_y)
+            # Store current position before changing levels
+            old_x, old_y = self.player.x, self.player.y
             self.current_level -= 1  # Go up one level
             self.initialize_level(self.current_level)
+            # Place player near the down stairs
+            if self.levels[self.current_level].stairs_down:
+                self.player.x, self.player.y = self.levels[self.current_level].stairs_down
+                # Move one tile away from stairs if possible
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    new_x, new_y = self.player.x + dx, self.player.y + dy
+                    if self.levels[self.current_level].is_walkable(new_x, new_y):
+                        self.player.x, self.player.y = new_x, new_y
+                        break
         elif stairs == "down" and self.current_level < MAX_LEVELS - 1:
-            # Store current position before level transition
-            self.player_positions[self.current_level] = (self.player_x, self.player_y)
+            # Store current position before changing levels
+            old_x, old_y = self.player.x, self.player.y
             self.current_level += 1  # Go down one level
             self.initialize_level(self.current_level)
+            # Place player near the up stairs
+            if self.levels[self.current_level].stairs_up:
+                self.player.x, self.player.y = self.levels[self.current_level].stairs_up
+                # Move one tile away from stairs if possible
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    new_x, new_y = self.player.x + dx, self.player.y + dy
+                    if self.levels[self.current_level].is_walkable(new_x, new_y):
+                        self.player.x, self.player.y = new_x, new_y
+                        break
         else:
             # Normal movement
-            self.player_x = new_x
-            self.player_y = new_y
-            # Update stored position
-            self.player_positions[self.current_level] = (self.player_x, self.player_y)
+            self.player.x = new_x
+            self.player.y = new_y
 
         # Update field of view after movement
-        self.levels[self.current_level].update_fov(self.player_x, self.player_y)
+        self.levels[self.current_level].update_fov(self.player.x, self.player.y)
+        
+        # Update player state
+        self.player.update()
 
 def main():
     # Initialize the game window and console
@@ -257,9 +302,9 @@ def main():
         console.clear()
 
         # Render all game elements
-        renderer.render_map(game.levels[game.current_level], game.player_x, game.player_y)
+        renderer.render_map(game.levels[game.current_level], game.player.x, game.player.y)
         renderer.render_stairs(game.levels[game.current_level])
-        renderer.render_player(game.player_x, game.player_y)
+        renderer.render_player(game.player.x, game.player.y)
         renderer.render_level(game.current_level)
 
         # Display the rendered frame

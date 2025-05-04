@@ -33,9 +33,6 @@ class Renderer:
             self.ui_renderer.render_messages(messages)
         self.ui_renderer.render_status(player)
 
-        # Present the console
-        self.console.present()
-
     def get_terrain_color(self, terrain, is_visible, is_outdoor, level=0):
         """Get the appropriate color for terrain based on type, visibility, and level"""
         # Base colors for different terrain types
