@@ -80,6 +80,46 @@ class Player(Entity):
         self.max_inventory_size = 10
         self.selected_item_index = 0
 
+        # Equipment
+        self.equipped_weapon = None
+        self.equipped_armor = None
+        
+        # Combat state
+        self.is_attacking = False
+        self.attack_cooldown = 0
+        self.attack_direction = (0, 0)
+        self.is_blocking = False
+        self.block_cooldown = 0
+        self.is_dodging = False
+        self.dodge_cooldown = 0
+        self.dodge_direction = (0, 0)
+        
+        # Movement state
+        self.is_moving = False
+        self.move_cooldown = 0
+        self.move_direction = (0, 0)
+        
+        # Animation state
+        self.animation_frame = 0
+        self.animation_timer = 0
+        
+        # Combat history
+        self.last_damage_taken = 0
+        self.last_damage_dealt = 0
+        self.last_heal_amount = 0
+        
+        # Death state
+        self.is_dead = False
+        self.death_timer = 0
+        
+        # Respawn state
+        self.respawn_timer = 0
+        self.respawn_point = None
+        
+        # Save state
+        self.last_save_point = None
+        self.last_save_level = None
+
     def calculate_max_hp(self):
         """Calculate max HP based on VITALITY"""
         base_hp = 100
@@ -338,4 +378,12 @@ class Player(Entity):
         """Get the currently selected item"""
         if 0 <= self.selected_item_index < len(self.inventory):
             return self.inventory[self.selected_item_index]
-        return None 
+        return None
+
+    def use_item(self, item):
+        """Use an item from the inventory"""
+        if item in self.inventory:
+            if item.use(self):
+                self.inventory.remove(item)
+                return True
+        return False 
