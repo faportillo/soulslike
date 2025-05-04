@@ -40,6 +40,8 @@ class Game:
             'width': self.width,
             'height': self.height,
             'current_level': self.current_level,
+            'last_save_point': self.last_save_point,  # Save the last save point
+            'last_save_level': self.last_save_level,  # Save the level of the last save point
             'player': {
                 'x': self.player.x,
                 'y': self.player.y,
@@ -73,7 +75,8 @@ class Game:
                 'stairs_down': level.stairs_down,
                 'stairs_discovered': level.stairs_discovered,
                 'is_outdoor': level.is_outdoor,
-                'spawn_point': level.spawn_point
+                'spawn_point': level.spawn_point,
+                'save_point': level.save_point  # Save the save point for each level
             }
         
         # Save to file
@@ -94,6 +97,8 @@ class Game:
             self.width = save_data['width']
             self.height = save_data['height']
             self.current_level = save_data['current_level']
+            self.last_save_point = save_data.get('last_save_point')  # Restore last save point
+            self.last_save_level = save_data.get('last_save_level')  # Restore last save level
             
             # Restore player data
             player_data = save_data['player']
@@ -154,6 +159,7 @@ class Game:
                 level.stairs_discovered = level_data['stairs_discovered']
                 level.is_outdoor = level_data['is_outdoor']
                 level.spawn_point = level_data['spawn_point']
+                level.save_point = level_data.get('save_point')  # Restore save point for each level
                 self.levels[int(level_num)] = level
             
             # Update FOV for current position
