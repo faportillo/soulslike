@@ -50,10 +50,12 @@ class Map:
                     self.tiles[x, y] = TERRAIN_WALL
 
         # Add some random rock formations
+        rock_positions = []  # Store positions of rock formations
         for _ in range(8):  # Increased number of rock formations
             rock_x = random.randint(2, self.width - 3)
             rock_y = random.randint(2, self.height - 3)
             rock_size = random.randint(3, 6)  # Larger rock formations
+            rock_positions.append((rock_x, rock_y))  # Store center of rock formation
             for dx in range(-rock_size, rock_size + 1):
                 for dy in range(-rock_size, rock_size + 1):
                     if 0 < rock_x + dx < self.width - 1 and 0 < rock_y + dy < self.height - 1:
@@ -78,17 +80,57 @@ class Map:
                         if self.tiles[lake_x + dx, lake_y + dy] == TERRAIN_GRASS:
                             self.tiles[lake_x + dx, lake_y + dy] = TERRAIN_SAND
 
-        # Create a cave entrance
-        cave_x = random.randint(10, self.width - 11)
-        cave_y = random.randint(10, self.height - 11)
-        # Make sure cave is not in water
-        while self.tiles[cave_x, cave_y] == TERRAIN_WATER:
+        # Find a suitable cave entrance location next to a rock formation
+        cave_placed = False
+        cave_x = None
+        cave_y = None
+        for rock_x, rock_y in rock_positions:
+            if cave_placed:
+                break
+            # Try each direction around the rock formation
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                cave_x = rock_x + dx
+                cave_y = rock_y + dy
+                # Check if the position is valid and not in water
+                if (0 < cave_x < self.width - 1 and 0 < cave_y < self.height - 1 and
+                    self.tiles[cave_x, cave_y] != TERRAIN_WATER):
+                    # Create a larger, more visible cave entrance with a clear path
+                    for cx in range(-2, 3):
+                        for cy in range(-2, 3):
+                            if 0 < cave_x + cx < self.width - 1 and 0 < cave_y + cy < self.height - 1:
+                                if cx*cx + cy*cy <= 4:  # 5x5 cave entrance
+                                    self.tiles[cave_x + cx, cave_y + cy] = TERRAIN_CAVE
+                                    # Ensure the edges of the cave entrance are walkable
+                                    if cx*cx + cy*cy == 4:  # Outer edge
+                                        self.tiles[cave_x + cx, cave_y + cy] = TERRAIN_GRASS
+                    # Place stairs down in the center of the cave
+                    self.stairs_down = (cave_x, cave_y)
+                    cave_placed = True
+                    break
+
+        # If no suitable cave location found, place it in a random valid position
+        if not cave_placed:
             cave_x = random.randint(10, self.width - 11)
             cave_y = random.randint(10, self.height - 11)
+            while self.tiles[cave_x, cave_y] == TERRAIN_WATER:
+                cave_x = random.randint(10, self.width - 11)
+                cave_y = random.randint(10, self.height - 11)
+            
+            # Create the cave entrance
+            for dx in range(-2, 3):
+                for dy in range(-2, 3):
+                    if 0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1:
+                        if dx*dx + dy*dy <= 4:  # 5x5 cave entrance
+                            self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_CAVE
+                            if dx*dx + dy*dy == 4:  # Outer edge
+                                self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_GRASS
+            self.stairs_down = (cave_x, cave_y)
         
         # Find a safe spawn point away from the cave
         min_distance = 20  # Minimum distance from cave
         max_attempts = 100
+        spawn_x = None
+        spawn_y = None
         for _ in range(max_attempts):
             spawn_x = random.randint(5, self.width - 6)
             spawn_y = random.randint(5, self.height - 6)
@@ -101,19 +143,12 @@ class Map:
         # If no suitable spawn point found, place in a corner
         if not self.spawn_point:
             self.spawn_point = (5, 5)
+            spawn_x, spawn_y = self.spawn_point
 
-        # Create a larger, more visible cave entrance with a clear path
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                if 0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1:
-                    if dx*dx + dy*dy <= 4:  # 5x5 cave entrance
-                        self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_CAVE
-                        # Ensure the edges of the cave entrance are walkable
-                        if dx*dx + dy*dy == 4:  # Outer edge
-                            self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_GRASS
-        
-        # Place stairs down in the center of the cave
-        self.stairs_down = (cave_x, cave_y)
+        # Ensure there's a clear path from spawn to cave
+        if not self.path_exists(self.spawn_point, self.stairs_down):
+            # Create a direct path between spawn and cave
+            self.create_direct_path(self.spawn_point, self.stairs_down)
         
         # Mark everything as visible and explored in outdoor level
         self.visible.fill(True)
@@ -142,6 +177,18 @@ class Map:
         x1, y1 = start
         x2, y2 = end
 
+        # Store the cave entrance position and type if it's at the end point
+        is_cave_end = (x2, y2) == self.stairs_down
+        if is_cave_end:
+            cave_center = (x2, y2)
+            cave_tiles = []
+            # Store the cave entrance tiles
+            for dx in range(-2, 3):
+                for dy in range(-2, 3):
+                    if 0 <= x2 + dx < self.width and 0 <= y2 + dy < self.height:
+                        if dx*dx + dy*dy <= 4:  # 5x5 cave entrance
+                            cave_tiles.append(((x2 + dx, y2 + dy), self.tiles[x2 + dx, y2 + dy]))
+
         # Clear a 3-tile radius around both stair positions
         for dx in range(-3, 4):
             for dy in range(-3, 4):
@@ -165,6 +212,11 @@ class Map:
                 self.tiles[x1, y] = TERRAIN_GRASS
             for x in range(min(x1, x2), max(x1, x2) + 1):
                 self.tiles[x, y2] = TERRAIN_GRASS
+
+        # Restore the cave entrance if it was at the end point
+        if is_cave_end:
+            for (x, y), terrain in cave_tiles:
+                self.tiles[x, y] = terrain
 
     def ensure_clear_stair_area(self, x, y):
         """Ensure a 3-tile radius around a position is clear"""

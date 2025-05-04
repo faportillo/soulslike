@@ -39,33 +39,33 @@ class Renderer:
         base_colors = {
             TERRAIN_WALL: {
                 'outdoor': (34, 139, 34),    # Forest green
-                'indoor': (50, 50, 50),      # Dark gray
-                'deep': (25, 25, 25)         # Very dark gray
+                'indoor': (80, 80, 120),     # Vibrant blue-gray
+                'deep': (60, 60, 100)        # Deep blue-gray
             },
             TERRAIN_GRASS: {
                 'outdoor': (34, 139, 34),    # Forest green
-                'indoor': (100, 100, 100),   # Light gray
-                'deep': (80, 80, 80)         # Darker gray
+                'indoor': (150, 150, 180),   # Bright gray with blue tint
+                'deep': (130, 130, 160)      # Slightly darker blue-gray
             },
             TERRAIN_ROCK: {
                 'outdoor': (169, 169, 169),  # Dark gray
-                'indoor': (169, 169, 169),   # Dark gray
-                'deep': (139, 69, 19)        # Brown
+                'indoor': (180, 140, 100),   # Warm stone color
+                'deep': (160, 120, 80)       # Deep warm stone
             },
             TERRAIN_CAVE: {
                 'outdoor': (139, 69, 19),    # Brown
-                'indoor': (139, 69, 19),     # Brown
-                'deep': (101, 67, 33)        # Dark brown
+                'indoor': (160, 82, 45),     # Sienna
+                'deep': (139, 69, 19)        # Brown
             },
             TERRAIN_WATER: {
                 'outdoor': (0, 105, 148),    # Deep blue
-                'indoor': (0, 105, 148),     # Deep blue
-                'deep': (0, 0, 139)          # Dark blue
+                'indoor': (0, 150, 200),     # Bright blue
+                'deep': (0, 100, 180)        # Deep blue
             },
             TERRAIN_SAND: {
                 'outdoor': (238, 214, 175),  # Sand
-                'indoor': (238, 214, 175),   # Sand
-                'deep': (205, 133, 63)       # Peru
+                'indoor': (255, 228, 196),   # Bisque
+                'deep': (245, 222, 179)      # Wheat
             }
         }
 
@@ -83,7 +83,7 @@ class Renderer:
             return tuple(max(0, c // 3) for c in base)
         elif not is_outdoor and level > 0:
             # Add a slight tint based on level
-            tint = min(30, level * 5)  # Maximum tint of 30
+            tint = min(40, level * 6)  # Increased maximum tint to 40
             return tuple(min(255, c + tint) for c in base)
         return base
 
@@ -154,7 +154,7 @@ class Renderer:
         elif terrain == TERRAIN_GRASS:  # Used as floor in dungeon
             return color, "."  # Floor
         elif terrain == TERRAIN_ROCK:
-            return color, "O"  # Rocks
+            return color, "#"  # Rocks (now using wall character)
         elif terrain == TERRAIN_CAVE:
             return color, "C"  # Cave
         elif terrain == TERRAIN_WATER:
