@@ -20,6 +20,7 @@ from rendering.map_renderer import MapRenderer
 from rendering.inventory_screen import InventoryScreenRenderer
 from core.items import HealthPotion, StaminaPotion, StrengthPotion, DefensePotion
 from rendering.dialogue_screen import DialogueScreenRenderer
+from core.npc import get_dialogue_for_npc
 
 def show_main_menu(console, game, renderer, character_screen, pause_screen, main_menu):
     """Show the main menu and handle menu options"""
@@ -240,7 +241,8 @@ def main():
                             check_y = game.player.y + dy
                             npc = current_map.get_npc_at(check_x, check_y)
                             if npc and not dialogue_screen.visible:
-                                dialogue_screen.show(npc)
+                                dialogue_id = get_dialogue_for_npc(npc)
+                                dialogue_screen.show(npc, dialogue_id)
                                 break
                         if dialogue_screen.visible:
                             break

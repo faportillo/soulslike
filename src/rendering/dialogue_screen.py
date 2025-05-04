@@ -2,13 +2,15 @@ import tcod
 from core.npc import NPC, Dialogue
 
 class DialogueScreenRenderer:
-    def __init__(self, console, width=60, height=20):
+    def __init__(self, console, width=60, height=35):
         """Initialize the dialogue screen renderer"""
-        self.console = console
         self.width = width
         self.height = height
+        self.console = console
         self.visible = False
-        self.selected_option = 0
+        self.selected_index = 0
+        self.current_npc = None
+        self._last_render = None  # Store last render state
         # Calculate position to center the dialogue screen
         self.x_offset = (80 - width) // 2
         self.y_offset = (50 - height) // 2
@@ -74,7 +76,7 @@ class DialogueScreenRenderer:
         options_start_y = text_box_y + text_box_height + 1
         for i, option in enumerate(current_dialogue.options):
             y = options_start_y + i
-            if i == self.selected_option:
+            if i == self.selected_index:
                 self.console.print(self.x_offset + 4, y, ">", fg=(255, 255, 0))
                 self.console.print(self.x_offset + 6, y, option.text, fg=(255, 255, 0))
             else:
@@ -97,29 +99,31 @@ class DialogueScreenRenderer:
                 npc.end_dialogue()
                 return True
             elif event.sym == tcod.event.K_UP:
-                self.selected_option = max(0, self.selected_option - 1)
+                self.selected_index = max(0, self.selected_index - 1)
                 return True
             elif event.sym == tcod.event.K_DOWN:
                 current_dialogue = npc.get_current_dialogue()
                 if current_dialogue:
-                    self.selected_option = min(len(current_dialogue.options) - 1, self.selected_option + 1)
+                    self.selected_index = min(len(current_dialogue.options) - 1, self.selected_index + 1)
                 return True
             elif event.sym == tcod.event.K_SPACE:
                 current_dialogue = npc.get_current_dialogue()
                 if current_dialogue:
-                    next_dialogue = npc.select_option(self.selected_option)
+                    next_dialogue = npc.select_option(self.selected_index)
                     if next_dialogue:
                         npc.start_dialogue(next_dialogue)
                     else:
                         self.visible = False
                         npc.end_dialogue()
-                    self.selected_option = 0
+                    self.selected_index = 0
                 return True
 
         return False
 
-    def show(self, npc: NPC):
-        """Show the dialogue screen and start dialogue with the NPC"""
+    def show(self, npc, dialogue_id="greeting"):
+        """Show the dialogue screen for an NPC"""
+        self.current_npc = npc
         self.visible = True
-        self.selected_option = 0
-        npc.start_dialogue("greeting") 
+        self.selected_index = 0
+        self._last_render = None  # Reset render state
+        npc.start_dialogue(dialogue_id) 

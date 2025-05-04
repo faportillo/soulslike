@@ -23,6 +23,7 @@ class NPC:
         self.dialogues = dialogues
         self.current_dialogue_id = None
         self.is_talking = False
+        self.has_given_potion = False  # Track if healer has given a potion
 
     def start_dialogue(self, dialogue_id: str):
         """Start a dialogue with the given ID"""
@@ -149,13 +150,15 @@ def create_healer(x: int, y: int) -> NPC:
         for i, item in enumerate(game.player.inventory):
             print(f"{i}: {item.name} - {item.description}")
         print("=======================\n")
+        # Mark that this healer has given their potion
+        game.levels[game.current_level].get_npc_at(x, y).has_given_potion = True
 
     dialogues = {
         "greeting": Dialogue(
             "greeting",
-            "Greetings, traveler! I am a healer. Would you like a health potion?",
+            "Greetings, traveler! I have one health potion to spare. Would you like it?",
             [
-                DialogueOption("Yes, please give me a health potion.", "give_potion", give_health_potion),
+                DialogueOption("Yes, please give me the health potion.", "give_potion", give_health_potion),
                 DialogueOption("No, thank you.", None)
             ]
         ),
@@ -163,10 +166,24 @@ def create_healer(x: int, y: int) -> NPC:
             "give_potion",
             "Here you go! Take this health potion. It will restore your health when you need it most.",
             [
-                DialogueOption("Thank you!", None),
-                DialogueOption("I need another one.", "greeting")
+                DialogueOption("Thank you!", None)
+            ]
+        ),
+        "no_potion": Dialogue(
+            "no_potion",
+            "I'm sorry, but I've already given away my last health potion. I hope you find another healer who can help you.",
+            [
+                DialogueOption("I understand.", None)
             ]
         )
     }
     
-    return NPC(x, y, "Healer", "H", (0, 255, 0), dialogues)  # Green color for healer 
+    healer = NPC(x, y, "Healer", "H", (0, 255, 0), dialogues)  # Green color for healer
+    healer.has_given_potion = False
+    return healer
+
+def get_dialogue_for_npc(npc):
+    """Get the appropriate dialogue based on NPC state"""
+    if npc.name == "Healer" and npc.has_given_potion:
+        return "no_potion"
+    return "greeting" 
