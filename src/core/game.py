@@ -17,6 +17,7 @@ class Game:
         self.levels = {}  # Dictionary to store all game levels
         self.current_level = 0  # Start at level 0 (outdoor level)
         self.player = None  # Will be initialized in initialize_level
+        self.show_character_screen = False  # Track if character screen is visible
         self.initialize_level(self.current_level)  # Set up the first level
 
     def save_game(self):
@@ -186,7 +187,19 @@ class Game:
         elif isinstance(event, tcod.event.KeyDown):
             # Handle escape key
             if event.sym == tcod.event.KeySym.ESCAPE:
+                if self.show_character_screen:
+                    self.show_character_screen = False
+                    return True
                 return False
+            
+            # Handle character screen toggle
+            if event.sym == tcod.event.KeySym.c:
+                self.show_character_screen = not self.show_character_screen
+                return True
+            
+            # If character screen is open, ignore other inputs
+            if self.show_character_screen:
+                return True
             
             # Handle save/load keys
             if event.sym == tcod.event.KeySym.s:  # Save game
