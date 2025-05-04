@@ -11,6 +11,8 @@ from utils.constants import *
 from rendering.renderer import Renderer
 
 class Game:
+    _instance = None
+
     def __init__(self):
         # Initialize game dimensions and state
         self.width = 80  # Width of the game window in tiles
@@ -25,6 +27,12 @@ class Game:
         self.message = None  # Store the current message to display
         self.message_timer = 0  # Timer for message display
         self.initialize_level(self.current_level)  # Set up the first level
+        Game._instance = self
+
+    @classmethod
+    def get_instance(cls):
+        """Get the current game instance"""
+        return cls._instance
 
     def save_game(self):
         """Save the current game state to a file"""

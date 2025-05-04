@@ -63,7 +63,7 @@ class InventoryScreenRenderer:
             self.console.print(self.x_offset + self.width - len(page_info) - 2, self.y_offset + self.height - 2, page_info, fg=(150, 150, 150))
 
         # Draw help text
-        help_text = "↑/↓: Select  Enter: Use  D: Drop  Esc: Close"
+        help_text = "↑/↓: Select  Space: Use  D: Drop  Esc: Close"
         self.console.print(self.x_offset + self.width // 2 - len(help_text) // 2, self.y_offset + self.height - 2, help_text, fg=(150, 150, 150))
 
     def handle_input(self, event, player):

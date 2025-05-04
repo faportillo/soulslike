@@ -19,6 +19,7 @@ from utils.colors import *
 from rendering.map_renderer import MapRenderer
 from rendering.inventory_screen import InventoryScreenRenderer
 from core.items import HealthPotion, StaminaPotion, StrengthPotion, DefensePotion
+from rendering.dialogue_screen import DialogueScreenRenderer
 
 def show_main_menu(console, game, renderer, character_screen, pause_screen, main_menu):
     """Show the main menu and handle menu options"""
@@ -78,6 +79,7 @@ def main():
     main_menu = MainMenuRenderer(console)
     map_renderer = MapRenderer(console)
     inventory_screen = InventoryScreenRenderer(console)
+    dialogue_screen = DialogueScreenRenderer(console)
     
     # Add some test items to the player's inventory
     game.player.add_to_inventory(HealthPotion())
@@ -92,14 +94,14 @@ def main():
     
     # Main game loop
     while True:
+        # Update game state if not paused and no screens are open
+        if not game.is_paused and not inventory_screen.visible and not game.show_character_screen and not dialogue_screen.visible:
+            game.update()
+        
         # Clear the console
         console.clear()
         
-        # Update game state if not paused and no screens are open
-        if not game.is_paused and not inventory_screen.visible and not game.show_character_screen:
-            game.update()
-        
-        # Render the game first
+        # Render the game map first
         renderer.render_all(game, game.player, None)
         
         # Then render any overlays
@@ -113,6 +115,33 @@ def main():
                 for y in range(50):
                     console.print(x, y, " ", bg=(0, 0, 0))
             inventory_screen.render(game.player)
+        elif dialogue_screen.visible:
+            # Draw a semi-transparent background for the dialogue
+            for x in range(80):
+                for y in range(50):
+                    console.print(x, y, " ", bg=(0, 0, 0))
+            # Find the NPC that's currently in dialogue
+            current_map = game.levels[game.current_level]
+            current_npc = None
+            for dx in range(-1, 2):
+                for dy in range(-1, 2):
+                    check_x = game.player.x + dx
+                    check_y = game.player.y + dy
+                    npc = current_map.get_npc_at(check_x, check_y)
+                    if npc and npc.is_talking:
+                        current_npc = npc
+                        break
+                if current_npc:
+                    break
+            if current_npc:
+                dialogue_screen.render(current_npc)
+        
+        # Render NPCs last
+        current_map = game.levels[game.current_level]
+        for npc in current_map.npcs:
+            # Only render NPCs that are visible and not in dialogue
+            if current_map.visible[npc.x, npc.y] and not npc.is_talking:
+                console.print(npc.x, npc.y, npc.char, fg=npc.color)
         
         # Present the console
         tcod.console_flush()
@@ -122,39 +151,49 @@ def main():
             if isinstance(event, tcod.event.Quit):
                 return
             elif isinstance(event, tcod.event.KeyDown):
-                # Handle inventory screen input first
+                # Handle dialogue screen input first
+                if dialogue_screen.visible:
+                    current_map = game.levels[game.current_level]
+                    # Find the NPC that's currently in dialogue
+                    current_npc = None
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            check_x = game.player.x + dx
+                            check_y = game.player.y + dy
+                            npc = current_map.get_npc_at(check_x, check_y)
+                            if npc and npc.is_talking:
+                                current_npc = npc
+                                break
+                        if current_npc:
+                            break
+                    if current_npc and dialogue_screen.handle_input(event, current_npc):
+                        continue
+                
+                # Handle inventory screen input
                 if inventory_screen.visible:
                     if event.sym == tcod.event.KeySym.ESCAPE:
                         inventory_screen.visible = False
-                        continue
                     elif event.sym == tcod.event.KeySym.UP:
                         inventory_screen.selected_index = max(0, inventory_screen.selected_index - 1)
-                        if inventory_screen.selected_index < inventory_screen.current_page * inventory_screen.items_per_page:
-                            inventory_screen.current_page = max(0, inventory_screen.current_page - 1)
-                        continue
                     elif event.sym == tcod.event.KeySym.DOWN:
                         inventory_screen.selected_index = min(len(game.player.inventory) - 1, inventory_screen.selected_index + 1)
-                        if inventory_screen.selected_index >= (inventory_screen.current_page + 1) * inventory_screen.items_per_page:
-                            inventory_screen.current_page = min((len(game.player.inventory) - 1) // inventory_screen.items_per_page, inventory_screen.current_page + 1)
-                        continue
-                    elif event.sym == tcod.event.KeySym.RETURN:
+                    elif event.sym == tcod.event.KeySym.SPACE:
                         if 0 <= inventory_screen.selected_index < len(game.player.inventory):
                             item = game.player.inventory[inventory_screen.selected_index]
                             if item.use(game.player):
                                 game.player.inventory.pop(inventory_screen.selected_index)
                                 if inventory_screen.selected_index >= len(game.player.inventory):
                                     inventory_screen.selected_index = max(0, len(game.player.inventory) - 1)
-                        continue
                     elif event.sym == tcod.event.KeySym.d:
                         if 0 <= inventory_screen.selected_index < len(game.player.inventory):
                             game.player.inventory.pop(inventory_screen.selected_index)
                             if inventory_screen.selected_index >= len(game.player.inventory):
                                 inventory_screen.selected_index = max(0, len(game.player.inventory) - 1)
-                        continue
+                    continue
                 
                 if event.sym == tcod.event.KeySym.ESCAPE:
                     # Toggle pause state if no screens are open
-                    if not inventory_screen.visible and not game.show_character_screen:
+                    if not inventory_screen.visible and not game.show_character_screen and not dialogue_screen.visible:
                         game.is_paused = not game.is_paused
                     continue
                 
@@ -191,8 +230,33 @@ def main():
                         inventory_screen.current_page = 0
                     continue
                 
+                # Handle NPC interaction
+                if event.sym == tcod.event.KeySym.SPACE:
+                    current_map = game.levels[game.current_level]
+                    # Check for NPCs in a one tile radius
+                    for dx in range(-1, 2):
+                        for dy in range(-1, 2):
+                            check_x = game.player.x + dx
+                            check_y = game.player.y + dy
+                            npc = current_map.get_npc_at(check_x, check_y)
+                            if npc and not dialogue_screen.visible:
+                                dialogue_screen.show(npc)
+                                break
+                        if dialogue_screen.visible:
+                            break
+                    if dialogue_screen.visible:
+                        continue
+                    # Handle save point interaction
+                    elif current_map.is_save_point(game.player.x, game.player.y):
+                        success, message = game.save_game()
+                        game.last_save_point = (game.player.x, game.player.y)
+                        game.last_save_level = game.current_level
+                        game.message = "Game saved!"
+                        game.message_timer = 60  # Show message for 60 frames
+                        continue
+                
                 # Only handle movement if no screens are open and game is not paused
-                if not inventory_screen.visible and not game.show_character_screen and not game.is_paused:
+                if not inventory_screen.visible and not game.show_character_screen and not dialogue_screen.visible and not game.is_paused:
                     if event.sym == tcod.event.KeySym.UP or event.sym == tcod.event.KeySym.KP_8:
                         game.try_move(0, -1)  # Move up
                     elif event.sym == tcod.event.KeySym.DOWN or event.sym == tcod.event.KeySym.KP_2:
@@ -209,15 +273,6 @@ def main():
                         game.try_move(-1, 1)  # Move down-left
                     elif event.sym == tcod.event.KeySym.KP_3:
                         game.try_move(1, 1)   # Move down-right
-                    elif event.sym == tcod.event.KeySym.SPACE:
-                        # Handle save point interaction
-                        current_map = game.levels[game.current_level]
-                        if current_map.is_save_point(game.player.x, game.player.y):
-                            success, message = game.save_game()
-                            game.last_save_point = (game.player.x, game.player.y)
-                            game.last_save_level = game.current_level
-                            game.message = "Game saved!"
-                            game.message_timer = 60  # Show message for 60 frames
 
 if __name__ == "__main__":
     main() 

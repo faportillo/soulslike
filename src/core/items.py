@@ -14,8 +14,8 @@ class HealthPotion(Item):
 
     def use(self, player):
         heal_amount = 30
-        if player.health < player.max_health:
-            player.health = min(player.max_health, player.health + heal_amount)
+        if player.hp < player.max_hp:
+            player.hp = min(player.max_hp, player.hp + heal_amount)
             return True
         return False
 

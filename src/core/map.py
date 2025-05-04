@@ -30,6 +30,7 @@ class Map:
         self.is_outdoor = level == 0  # First level is outdoor
         self.spawn_point = None  # Player spawn point for outdoor level
         self.save_point = None  # Save point for the level
+        self.npcs = []  # List of NPCs in the level
         self.generate()  # Generate the map
 
     def generate(self):
@@ -321,6 +322,24 @@ class Map:
                     continue
                 if 0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1:
                     self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_MOSS
+
+        # Add a merchant near the save point
+        from core.npc import create_merchant, create_healer
+        if self.save_point:
+            save_x, save_y = self.save_point
+            # Place merchant 2 tiles away from save point
+            merchant_x = save_x + 2
+            merchant_y = save_y
+            if self.is_walkable(merchant_x, merchant_y):
+                merchant = create_merchant(merchant_x, merchant_y)
+                self.add_npc(merchant)
+
+        # Add a healer near the spawn point
+        healer_x = spawn_x + 3
+        healer_y = spawn_y + 3
+        if self.is_walkable(healer_x, healer_y):
+            healer = create_healer(healer_x, healer_y)
+            self.add_npc(healer)
 
     def path_exists(self, start, end):
         """Check if a path exists between two points using breadth-first search"""
@@ -845,6 +864,18 @@ class Map:
                 # Create a direct path between stairs
                 self.create_direct_path(self.stairs_up, self.stairs_down)
 
+        # Add NPCs based on level
+        if level == 1:
+            # Add a guide NPC in the first room
+            if rooms:
+                room = rooms[0]
+                guide_x = room['center_x']
+                guide_y = room['center_y']
+                if self.is_walkable(guide_x, guide_y):
+                    from core.npc import create_guide
+                    guide = create_guide(guide_x, guide_y)
+                    self.add_npc(guide)
+
     def is_stairs(self, x, y):
         """Check if a position contains stairs and mark them as discovered"""
         if self.stairs_up and (x, y) == self.stairs_up:
@@ -865,6 +896,9 @@ class Map:
     def is_walkable(self, x, y):
         """Check if a position is walkable"""
         if not (0 <= x < self.width and 0 <= y < self.height):
+            return False
+        # Check if there's an NPC at this position
+        if self.get_npc_at(x, y):
             return False
         # Make cave terrain walkable only in outdoor level
         if self.is_outdoor:
@@ -906,4 +940,15 @@ class Map:
 
     def get_save_point(self):
         """Get the current save point coordinates"""
-        return self.save_point 
+        return self.save_point
+
+    def add_npc(self, npc):
+        """Add an NPC to the map"""
+        self.npcs.append(npc)
+
+    def get_npc_at(self, x, y):
+        """Get the NPC at the given coordinates, if any"""
+        for npc in self.npcs:
+            if npc.x == x and npc.y == y:
+                return npc
+        return None 
