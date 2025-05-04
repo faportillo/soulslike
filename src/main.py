@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.game import Game
 from rendering.renderer import Renderer
 from rendering.character_screen import CharacterScreenRenderer
+from rendering.pause_screen import PauseScreenRenderer
 
 def main():
     # Initialize the game window and console
@@ -28,6 +29,7 @@ def main():
     game = Game()
     renderer = Renderer(console)
     character_screen = CharacterScreenRenderer(console)
+    pause_screen = PauseScreenRenderer(console)
 
     # Main game loop
     while True:
@@ -46,6 +48,10 @@ def main():
         # Render character screen if active
         if game.show_character_screen:
             character_screen.render(game.player)
+        
+        # Render pause screen if game is paused
+        if game.is_paused:
+            pause_screen.render()
 
         # Display the rendered frame
         context.present(console)

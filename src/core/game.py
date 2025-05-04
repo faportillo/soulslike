@@ -18,6 +18,7 @@ class Game:
         self.current_level = 0  # Start at level 0 (outdoor level)
         self.player = None  # Will be initialized in initialize_level
         self.show_character_screen = False  # Track if character screen is visible
+        self.is_paused = False  # Track if game is paused
         self.initialize_level(self.current_level)  # Set up the first level
 
     def save_game(self):
@@ -190,7 +191,16 @@ class Game:
                 if self.show_character_screen:
                     self.show_character_screen = False
                     return True
+                self.is_paused = not self.is_paused
+                return True
+            
+            # Handle quit key when paused
+            if self.is_paused and event.sym == tcod.event.KeySym.q:
                 return False
+            
+            # If game is paused, ignore other inputs
+            if self.is_paused:
+                return True
             
             # Handle character screen toggle
             if event.sym == tcod.event.KeySym.c:
