@@ -49,7 +49,7 @@ class MainMenuRenderer:
         # Draw menu options
         options = [
             "1. New Game",
-            "2. Load Last Save" if has_save else "2. No Save Found",
+            "2. Load Last Save" if has_save else "2. No Save File Found",
             "3. Exit"
         ]
         

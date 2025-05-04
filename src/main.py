@@ -16,37 +16,48 @@ from rendering.pause_screen import PauseScreenRenderer
 from rendering.main_menu import MainMenuRenderer
 from utils.colors import *
 
-def show_main_menu(console, context, renderer, character_screen, pause_screen, main_menu):
-    """Show the main menu and return the selected game state"""
+def show_main_menu(console, game, renderer, character_screen, pause_screen, main_menu):
+    """Show the main menu and handle menu options"""
+    # Create a new game instance if none exists
+    if not game:
+        game = Game()
+    
+    # Check for save files
+    has_save = bool(game.list_saves())
+    
     while True:
         # Clear the console
         console.clear()
-
-        # Check if there's a save file
-        has_save = bool(Game().list_saves())
-
-        # Render main menu
+        
+        # Render the main menu
         main_menu.render(has_save)
+        
+        # Present the console
         tcod.console_flush()
-
-        # Handle menu input
+        
+        # Handle input
         for event in tcod.event.wait():
             if isinstance(event, tcod.event.Quit):
                 return None
             elif isinstance(event, tcod.event.KeyDown):
-                if event.sym == tcod.event.KeySym.ESCAPE:
-                    return None
-                elif event.sym == tcod.event.KeySym.KP_1 or event.sym == tcod.event.KeySym.N1:
+                if event.sym == tcod.event.KeySym.KP_1 or event.sym == tcod.event.KeySym.N1:
                     # Start new game
-                    return Game()
-                elif (event.sym == tcod.event.KeySym.KP_2 or event.sym == tcod.event.KeySym.N2) and has_save:
-                    # Load last save
-                    game = Game()
-                    saves = game.list_saves()
-                    if saves:
-                        success, message = game.load_game(saves[0][0])
-                        return game
+                    return game
+                elif event.sym == tcod.event.KeySym.KP_2 or event.sym == tcod.event.KeySym.N2:
+                    # Load game
+                    if has_save:
+                        saves = game.list_saves()
+                        if saves:
+                            save_path, _ = saves[0]  # Get the most recent save
+                            success, message = game.load_game(save_path)
+                            if success:
+                                return game
+                            else:
+                                print(f"Failed to load game: {message}")
+                                return None
+                    return None
                 elif event.sym == tcod.event.KeySym.KP_3 or event.sym == tcod.event.KeySym.N3:
+                    # Quit game
                     return None
 
 def main():
@@ -103,7 +114,10 @@ def main():
                         game.is_paused = False
                     elif event.sym == tcod.event.KeySym.KP_2 or event.sym == tcod.event.KeySym.N2:
                         # Return to main menu
-                        return show_main_menu(console, None, renderer, character_screen, pause_screen, main_menu)
+                        game = show_main_menu(console, None, renderer, character_screen, pause_screen, main_menu)
+                        if not game:
+                            return
+                        continue
                     elif event.sym == tcod.event.KeySym.KP_3 or event.sym == tcod.event.KeySym.N3:
                         # Quit game
                         return

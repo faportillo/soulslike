@@ -5,7 +5,8 @@ import pickle
 import os
 from datetime import datetime
 from core.map import Map
-from core.player import Player
+from core.player import Player, Attribute, Skill
+from core.item import Item
 from utils.constants import *
 from rendering.renderer import Renderer
 
@@ -42,13 +43,22 @@ class Game:
             'player': {
                 'x': self.player.x,
                 'y': self.player.y,
+                'attributes': self.player.attributes,
+                'skills': self.player.skills,
                 'hp': self.player.hp,
                 'max_hp': self.player.max_hp,
+                'stamina': self.player.stamina,
+                'max_stamina': self.player.max_stamina,
                 'defense': self.player.defense,
+                'attack_power': self.player.attack_power,
+                'critical_chance': self.player.critical_chance,
+                'dodge_chance': self.player.dodge_chance,
                 'level': self.player.level,
                 'experience': self.player.experience,
                 'experience_to_level': self.player.experience_to_level,
-                'inventory': [(item.item_type.value, item.x, item.y) for item in self.player.inventory]
+                'attribute_points': self.player.attribute_points,
+                'skill_points': self.player.skill_points,
+                'inventory': [(item.item_type, item.x, item.y) for item in self.player.inventory]
             },
             'levels': {}  # We'll save level data separately
         }
@@ -88,12 +98,49 @@ class Game:
             # Restore player data
             player_data = save_data['player']
             self.player = Player(player_data['x'], player_data['y'])
+            
+            # Restore core attributes
+            self.player.attributes = player_data.get('attributes', {
+                Attribute.STRENGTH: 10,
+                Attribute.DEXTERITY: 10,
+                Attribute.VITALITY: 10,
+                Attribute.INTELLIGENCE: 10,
+                Attribute.FAITH: 10
+            })
+            
+            # Restore skills
+            self.player.skills = player_data.get('skills', {
+                Skill.SWORD_MASTERY: 1,
+                Skill.SHIELD_BLOCK: 1,
+                Skill.EVASION: 1,
+                Skill.SPELLCASTING: 1,
+                Skill.HEALING: 1
+            })
+            
+            # Restore health and stamina
             self.player.hp = player_data['hp']
             self.player.max_hp = player_data['max_hp']
+            self.player.stamina = player_data.get('stamina', self.player.max_stamina)
+            self.player.max_stamina = player_data.get('max_stamina', self.player.calculate_max_stamina())
+            
+            # Restore combat stats
             self.player.defense = player_data['defense']
+            self.player.attack_power = player_data.get('attack_power', self.player.calculate_attack_power())
+            self.player.critical_chance = player_data.get('critical_chance', self.player.calculate_critical_chance())
+            self.player.dodge_chance = player_data.get('dodge_chance', self.player.calculate_dodge_chance())
+            
+            # Restore level and experience
             self.player.level = player_data['level']
             self.player.experience = player_data['experience']
             self.player.experience_to_level = player_data['experience_to_level']
+            self.player.attribute_points = player_data.get('attribute_points', 0)
+            self.player.skill_points = player_data.get('skill_points', 0)
+            
+            # Restore inventory
+            self.player.inventory = []
+            for item_data in player_data.get('inventory', []):
+                item_type, x, y = item_data
+                self.player.inventory.append(Item(item_type, x, y))
             
             # Restore levels
             self.levels = {}
