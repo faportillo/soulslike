@@ -3,6 +3,7 @@ import numpy as np
 import random
 import tcod
 from tcod import libtcodpy
+import math
 
 # Terrain type constants
 TERRAIN_WALL = 0    # Walls/trees that block movement
@@ -11,6 +12,7 @@ TERRAIN_ROCK = 2    # Rock formations that block movement
 TERRAIN_CAVE = 3    # Cave entrance/floor
 TERRAIN_WATER = 4   # Water that blocks movement
 TERRAIN_SAND = 5    # Walkable sand
+TERRAIN_MOSS = 6    # Mossy ground
 
 class Map:
     def __init__(self, width, height, level):
@@ -35,138 +37,281 @@ class Map:
         if self.is_outdoor:
             self.generate_outdoor()
         else:
-            self.generate_dungeon()
+            self.generate_dungeon(self.level)
 
     def generate_outdoor(self):
         """Generate an outdoor map with natural features"""
-        # Create a large open area with grass
-        for x in range(1, self.width - 1):
-            for y in range(1, self.height - 1):
-                self.tiles[x, y] = TERRAIN_GRASS
-
-        # Add some random water features
-        num_water_features = random.randint(3, 6)
-        for _ in range(num_water_features):
-            water_x = random.randint(5, self.width - 6)
-            water_y = random.randint(5, self.height - 6)
-            water_size = random.randint(3, 6)
-            for dx in range(-water_size, water_size + 1):
-                for dy in range(-water_size, water_size + 1):
-                    if (0 < water_x + dx < self.width - 1 and 
-                        0 < water_y + dy < self.height - 1 and
-                        dx*dx + dy*dy <= water_size*water_size):
-                        self.tiles[water_x + dx, water_y + dy] = TERRAIN_WATER
-
-        # Add some random rock formations
-        num_rocks = random.randint(5, 10)
-        for _ in range(num_rocks):
-            rock_x = random.randint(5, self.width - 6)
-            rock_y = random.randint(5, self.height - 6)
-            rock_size = random.randint(2, 4)
-            for dx in range(-rock_size, rock_size + 1):
-                for dy in range(-rock_size, rock_size + 1):
-                    if (0 < rock_x + dx < self.width - 1 and 
-                        0 < rock_y + dy < self.height - 1 and
-                        dx*dx + dy*dy <= rock_size*rock_size):
-                        self.tiles[rock_x + dx, rock_y + dy] = TERRAIN_ROCK
-
-        # Place a save point in a safe location
-        save_placed = False
-        max_attempts = 100
-        for _ in range(max_attempts):
-            save_x = random.randint(5, self.width - 6)
-            save_y = random.randint(5, self.height - 6)
-            if self.is_walkable(save_x, save_y):
-                self.save_point = (save_x, save_y)
-                save_placed = True
-                break
+        # Initialize the map with walls
+        self.tiles = np.full((self.width, self.height), TERRAIN_WALL)
         
-        if not save_placed:
-            # If no suitable location found, place near the center
-            center_x = self.width // 2
-            center_y = self.height // 2
-            for dx in range(-5, 6):
-                for dy in range(-5, 6):
-                    if self.is_walkable(center_x + dx, center_y + dy):
-                        self.save_point = (center_x + dx, center_y + dy)
-                        break
-                if self.save_point:
-                    break
-
-        # Find a suitable cave entrance location next to a rock formation
-        cave_placed = False
-        cave_x = None
-        cave_y = None
-        for rock_x, rock_y in [(rock_x, rock_y) for _ in range(num_rocks)]:
-            if cave_placed:
-                break
-            # Try each direction around the rock formation
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                cave_x = rock_x + dx
-                cave_y = rock_y + dy
-                # Check if the position is valid and not in water
-                if (0 < cave_x < self.width - 1 and 0 < cave_y < self.height - 1 and
-                    self.tiles[cave_x, cave_y] != TERRAIN_WATER):
-                    # Create a larger, more visible cave entrance with a clear path
-                    for cx in range(-2, 3):
-                        for cy in range(-2, 3):
-                            if 0 < cave_x + cx < self.width - 1 and 0 < cave_y + cy < self.height - 1:
-                                if cx*cx + cy*cy <= 4:  # 5x5 cave entrance
-                                    self.tiles[cave_x + cx, cave_y + cy] = TERRAIN_CAVE
-                                    # Ensure the edges of the cave entrance are walkable
-                                    if cx*cx + cy*cy == 4:  # Outer edge
-                                        self.tiles[cave_x + cx, cave_y + cy] = TERRAIN_GRASS
-                    # Place stairs down in the center of the cave
-                    self.stairs_down = (cave_x, cave_y)
-                    cave_placed = True
-                    break
-
-        # If no suitable cave location found, place it in a random valid position
-        if not cave_placed:
-            cave_x = random.randint(10, self.width - 11)
-            cave_y = random.randint(10, self.height - 11)
-            while self.tiles[cave_x, cave_y] == TERRAIN_WATER:
-                cave_x = random.randint(10, self.width - 11)
-                cave_y = random.randint(10, self.height - 11)
+        # Create a single large body of water in the center
+        water_center_x = self.width // 2
+        water_center_y = self.height // 2
+        water_radius = 5
+        
+        # Create the water body
+        for y in range(water_center_y - water_radius, water_center_y + water_radius + 1):
+            for x in range(water_center_x - water_radius, water_center_x + water_radius + 1):
+                if (x - water_center_x) ** 2 + (y - water_center_y) ** 2 <= water_radius ** 2:
+                    self.tiles[x, y] = TERRAIN_WATER
+        
+        # Create a more open layout with larger spaces
+        def create_open_area(x, y, width, height, min_size=8):
+            if width < min_size or height < min_size:
+                return
             
-            # Create the cave entrance
-            for dx in range(-2, 3):
-                for dy in range(-2, 3):
-                    if 0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1:
-                        if dx*dx + dy*dy <= 4:  # 5x5 cave entrance
-                            self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_CAVE
-                            if dx*dx + dy*dy == 4:  # Outer edge
-                                self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_GRASS
-            self.stairs_down = (cave_x, cave_y)
+            # Create a large open area
+            for i in range(x, x + width):
+                for j in range(y, y + height):
+                    if 0 < i < self.width - 1 and 0 < j < self.height - 1:
+                        self.tiles[i, j] = TERRAIN_GRASS
+            
+            # Add some random walls to break up the space
+            num_walls = random.randint(2, 4)
+            for _ in range(num_walls):
+                if random.random() < 0.5:
+                    # Horizontal wall
+                    wall_y = y + random.randint(1, height - 2)
+                    passage_x = x + random.randint(0, width - 1)
+                    for wall_x in range(x, x + width):
+                        if wall_x != passage_x:
+                            self.tiles[wall_x, wall_y] = TERRAIN_WALL
+                else:
+                    # Vertical wall
+                    wall_x = x + random.randint(1, width - 2)
+                    passage_y = y + random.randint(0, height - 1)
+                    for wall_y in range(y, y + height):
+                        if wall_y != passage_y:
+                            self.tiles[wall_x, wall_y] = TERRAIN_WALL
+            
+            # Recursively divide the space if it's large enough
+            if width > min_size * 2 and height > min_size * 2:
+                mid_x = x + width // 2
+                mid_y = y + height // 2
+                create_open_area(x, y, width // 2, height // 2, min_size)
+                create_open_area(mid_x, y, width // 2, height // 2, min_size)
+                create_open_area(x, mid_y, width // 2, height // 2, min_size)
+                create_open_area(mid_x, mid_y, width // 2, height // 2, min_size)
         
-        # Find a safe spawn point away from the cave
-        min_distance = 20  # Minimum distance from cave
-        max_attempts = 100
-        spawn_x = None
-        spawn_y = None
-        for _ in range(max_attempts):
-            spawn_x = random.randint(5, self.width - 6)
-            spawn_y = random.randint(5, self.height - 6)
-            # Check if spawn point is walkable and far enough from cave
-            if (self.is_walkable(spawn_x, spawn_y) and 
-                (spawn_x - cave_x)**2 + (spawn_y - cave_y)**2 >= min_distance**2):
-                self.spawn_point = (spawn_x, spawn_y)
-                break
+        # Start creating open areas
+        create_open_area(1, 1, self.width - 2, self.height - 2)
         
-        # If no suitable spawn point found, place in a corner
-        if not self.spawn_point:
-            self.spawn_point = (5, 5)
-            spawn_x, spawn_y = self.spawn_point
+        # Add more rock formations with natural clustering
+        for _ in range(20):  # Reduced number of rock formations but they'll be larger
+            x = random.randint(1, self.width - 2)
+            y = random.randint(1, self.height - 2)
+            if self.tiles[x, y] == TERRAIN_GRASS:
+                # Create larger, more natural rock formations
+                rock_size = random.randint(3, 6)  # Larger rock formations
+                for dx in range(-rock_size, rock_size + 1):
+                    for dy in range(-rock_size, rock_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= rock_size*rock_size):
+                            # Use a more natural distribution for rocks
+                            if random.random() < 0.7 * (1 - (dx*dx + dy*dy)/(rock_size*rock_size)):
+                                self.tiles[x + dx, y + dy] = TERRAIN_ROCK
 
-        # Ensure there's a clear path from spawn to cave
-        if not self.path_exists(self.spawn_point, self.stairs_down):
-            # Create a direct path between spawn and cave
-            self.create_direct_path(self.spawn_point, self.stairs_down)
+        # Add moss patches in natural clusters
+        for _ in range(15):  # Reduced number of moss clusters
+            x = random.randint(1, self.width - 2)
+            y = random.randint(1, self.height - 2)
+            if self.tiles[x, y] == TERRAIN_GRASS:
+                # Create moss clusters
+                moss_size = random.randint(2, 4)
+                for dx in range(-moss_size, moss_size + 1):
+                    for dy in range(-moss_size, moss_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= moss_size*moss_size):
+                            # Higher chance of moss in the center of clusters
+                            if random.random() < 0.8 * (1 - (dx*dx + dy*dy)/(moss_size*moss_size)):
+                                self.tiles[x + dx, y + dy] = TERRAIN_MOSS
+
+        # Add sand patches in natural formations
+        for _ in range(10):  # Reduced number of sand patches
+            x = random.randint(1, self.width - 2)
+            y = random.randint(1, self.height - 2)
+            if self.tiles[x, y] == TERRAIN_GRASS:
+                # Create sand formations
+                sand_size = random.randint(2, 5)
+                for dx in range(-sand_size, sand_size + 1):
+                    for dy in range(-sand_size, sand_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= sand_size*sand_size):
+                            # Create more natural sand patterns
+                            if random.random() < 0.6 * (1 - (dx*dx + dy*dy)/(sand_size*sand_size)):
+                                self.tiles[x + dx, y + dy] = TERRAIN_SAND
+
+        # Add some small water features near the main water body
+        water_center_x = self.width // 2
+        water_center_y = self.height // 2
+        for _ in range(3):  # Add a few small water features
+            angle = random.uniform(0, 2 * 3.14159)  # Random angle
+            distance = random.randint(8, 15)  # Distance from main water
+            x = int(water_center_x + distance * math.cos(angle))
+            y = int(water_center_y + distance * math.sin(angle))
+            
+            if 0 < x < self.width - 1 and 0 < y < self.height - 1:
+                # Create small water features
+                water_size = random.randint(2, 3)
+                for dx in range(-water_size, water_size + 1):
+                    for dy in range(-water_size, water_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= water_size*water_size):
+                            if random.random() < 0.7:  # 70% chance to place water
+                                self.tiles[x + dx, y + dy] = TERRAIN_WATER
         
         # Mark everything as visible and explored in outdoor level
         self.visible.fill(True)
         self.explored.fill(True)
         self.stairs_discovered["down"] = True
+        
+        # FINAL STEP: Place the cave entrance and its markers
+        cave_x = self.width - 8  # Move cave to bottom right
+        cave_y = self.height - 8
+        
+        # Create the rock formation
+        rock_size = 5  # Larger rock formation
+        for dx in range(-rock_size, rock_size + 1):
+            for dy in range(-rock_size, rock_size + 1):
+                if (0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1 and
+                    dx*dx + dy*dy <= rock_size*rock_size):
+                    self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_ROCK
+        
+        # Place the cave entrance and its markers
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                if (0 < cave_x + dx < self.width - 1 and 0 < cave_y + dy < self.height - 1):
+                    if dx == 0 and dy == 0:
+                        self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_CAVE  # Center is cave entrance
+                    else:
+                        self.tiles[cave_x + dx, cave_y + dy] = TERRAIN_CAVE  # Surrounding tiles are markers
+        
+        # Set the stairs down position
+        self.stairs_down = (cave_x, cave_y)
+        
+        # Create a clear dirt path from spawn to cave
+        spawn_x = 2  # Move spawn to top left
+        spawn_y = 2
+        self.tiles[spawn_x, spawn_y] = TERRAIN_GRASS
+        self.spawn_point = (spawn_x, spawn_y)
+        
+        # Create a natural-looking path with more winding
+        path_points = []
+        current_x, current_y = spawn_x, spawn_y
+        target_x, target_y = cave_x, cave_y
+        
+        # Create a winding path with more natural curves
+        while (current_x, current_y) != (target_x, target_y):
+            # Add current point to path
+            path_points.append((current_x, current_y))
+            
+            # Calculate direction to target
+            dx = target_x - current_x
+            dy = target_y - current_y
+            
+            # Add more natural winding
+            if random.random() < 0.8:  # 80% chance to add a detour
+                # Create a more natural curve
+                if abs(dx) > abs(dy):
+                    # More horizontal movement
+                    current_x += 1 if dx > 0 else -1
+                    if random.random() < 0.4:  # 40% chance to move vertically
+                        current_y += random.choice([-1, 1])
+                else:
+                    # More vertical movement
+                    current_y += 1 if dy > 0 else -1
+                    if random.random() < 0.4:  # 40% chance to move horizontally
+                        current_x += random.choice([-1, 1])
+            else:
+                # Move towards target
+                if abs(dx) > abs(dy):
+                    current_x += 1 if dx > 0 else -1
+                else:
+                    current_y += 1 if dy > 0 else -1
+            
+            # Ensure we don't go out of bounds
+            current_x = max(1, min(current_x, self.width - 2))
+            current_y = max(1, min(current_y, self.height - 2))
+            
+            # Add some random large detours
+            if random.random() < 0.1:  # 10% chance for a large detour
+                detour_length = random.randint(3, 6)
+                detour_direction = random.choice([(1, 0), (-1, 0), (0, 1), (0, -1)])
+                for _ in range(detour_length):
+                    if (0 < current_x + detour_direction[0] < self.width - 1 and 
+                        0 < current_y + detour_direction[1] < self.height - 1):
+                        current_x += detour_direction[0]
+                        current_y += detour_direction[1]
+                        path_points.append((current_x, current_y))
+        
+        # Add the final point
+        path_points.append((target_x, target_y))
+        
+        # Create the path and add dirt terrain with varying width
+        path_tiles = set()  # Keep track of all path tiles
+        for i, (x, y) in enumerate(path_points):
+            # Calculate path width based on distance from cave entrance
+            distance = len(path_points) - i  # Distance from cave entrance
+            max_width = 4  # Maximum width at the start
+            min_width = 2  # Minimum width near the cave
+            
+            # Calculate width based on distance (linear interpolation)
+            path_width = max(min_width, min(max_width, int(min_width + (max_width - min_width) * (distance / len(path_points)))))
+            
+            # Create the path with the calculated width
+            for dx in range(-path_width, path_width + 1):
+                for dy in range(-path_width, path_width + 1):
+                    if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1):
+                        # Add some randomness to the path edges
+                        if random.random() < 0.8:  # 80% chance to place path tile
+                            self.tiles[x + dx, y + dy] = TERRAIN_SAND  # Use sand as dirt path
+                            path_tiles.add((x + dx, y + dy))  # Add to path tiles set
+
+        # Fill non-path areas with rocks and trees
+        for x in range(1, self.width - 1):
+            for y in range(1, self.height - 1):
+                if (x, y) not in path_tiles:
+                    # Add some variety to the blocking terrain
+                    if random.random() < 0.6:  # 60% chance for trees
+                        self.tiles[x, y] = TERRAIN_WALL  # Trees
+                    else:
+                        self.tiles[x, y] = TERRAIN_ROCK  # Rocks
+
+        # Add moss patches in natural clusters (only on path)
+        for _ in range(15):
+            x = random.randint(1, self.width - 2)
+            y = random.randint(1, self.height - 2)
+            if (x, y) in path_tiles and self.tiles[x, y] == TERRAIN_SAND:
+                # Create moss clusters
+                moss_size = random.randint(2, 4)
+                for dx in range(-moss_size, moss_size + 1):
+                    for dy in range(-moss_size, moss_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= moss_size*moss_size):
+                            if (x + dx, y + dy) in path_tiles:  # Only place moss on path
+                                # Higher chance of moss in the center of clusters
+                                if random.random() < 0.8 * (1 - (dx*dx + dy*dy)/(moss_size*moss_size)):
+                                    self.tiles[x + dx, y + dy] = TERRAIN_MOSS
+
+        # Add some small water features near the main water body (only on path)
+        water_center_x = self.width // 2
+        water_center_y = self.height // 2
+        for _ in range(3):
+            angle = random.uniform(0, 2 * 3.14159)
+            distance = random.randint(8, 15)
+            x = int(water_center_x + distance * math.cos(angle))
+            y = int(water_center_y + distance * math.sin(angle))
+            
+            if 0 < x < self.width - 1 and 0 < y < self.height - 1 and (x, y) in path_tiles:
+                # Create small water features
+                water_size = random.randint(2, 3)
+                for dx in range(-water_size, water_size + 1):
+                    for dy in range(-water_size, water_size + 1):
+                        if (0 < x + dx < self.width - 1 and 0 < y + dy < self.height - 1 and
+                            dx*dx + dy*dy <= water_size*water_size):
+                            if (x + dx, y + dy) in path_tiles:  # Only place water on path
+                                if random.random() < 0.7:
+                                    self.tiles[x + dx, y + dy] = TERRAIN_WATER
 
     def path_exists(self, start, end):
         """Check if a path exists between two points using breadth-first search"""
@@ -238,11 +383,119 @@ class Map:
                 if 0 <= x + dx < self.width and 0 <= y + dy < self.height:
                     self.tiles[x + dx, y + dy] = TERRAIN_GRASS
 
-    def generate_dungeon(self):
-        """Generate a dungeon level with multiple rooms and corridors"""
+    def generate_dungeon(self, level):
+        """Generate a dungeon level with rooms, corridors, and features"""
         # Initialize the map with walls
-        self.tiles.fill(TERRAIN_WALL)
-
+        self.tiles = np.full((self.width, self.height), TERRAIN_WALL)
+        
+        if level == 0:  # Starting area
+            # Create a single large body of water in the center
+            water_center_x = self.width // 2
+            water_center_y = self.height // 2
+            water_radius = 5
+            
+            # Create the water body
+            for y in range(water_center_y - water_radius, water_center_y + water_radius + 1):
+                for x in range(water_center_x - water_radius, water_center_x + water_radius + 1):
+                    if (x - water_center_x) ** 2 + (y - water_center_y) ** 2 <= water_radius ** 2:
+                        self.tiles[x, y] = TERRAIN_WATER
+            
+            # Create a maze-like pattern using recursive division
+            def divide(x, y, width, height, orientation):
+                if width < 3 or height < 3:
+                    return
+                
+                # Choose a wall position
+                if orientation == 'horizontal':
+                    wall_y = y + random.randint(1, height - 2)
+                    passage_x = x + random.randint(0, width - 1)
+                    
+                    # Create horizontal wall
+                    for wall_x in range(x, x + width):
+                        if wall_x != passage_x:
+                            self.tiles[wall_x, wall_y] = TERRAIN_WALL
+                    
+                    # Recursively divide the two new sections
+                    divide(x, y, width, wall_y - y, 'vertical')
+                    divide(x, wall_y + 1, width, y + height - wall_y - 1, 'vertical')
+                else:  # vertical
+                    wall_x = x + random.randint(1, width - 2)
+                    passage_y = y + random.randint(0, height - 1)
+                    
+                    # Create vertical wall
+                    for wall_y in range(y, y + height):
+                        if wall_y != passage_y:
+                            self.tiles[wall_x, wall_y] = TERRAIN_WALL
+                    
+                    # Recursively divide the two new sections
+                    divide(x, y, wall_x - x, height, 'horizontal')
+                    divide(wall_x + 1, y, x + width - wall_x - 1, height, 'horizontal')
+            
+            # Start the division process
+            divide(1, 1, self.width - 2, self.height - 2, 'horizontal' if random.random() < 0.5 else 'vertical')
+            
+            # Convert some walls to grass to create paths
+            for y in range(1, self.height - 1):
+                for x in range(1, self.width - 1):
+                    if self.tiles[x, y] == TERRAIN_WALL:
+                        # Count adjacent walls
+                        wall_count = sum(1 for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]
+                                      if 0 <= x + dx < self.width and 0 <= y + dy < self.height
+                                      and self.tiles[x + dx, y + dy] == TERRAIN_WALL)
+                        
+                        # If this wall has 3 or 4 adjacent walls, make it grass
+                        if wall_count >= 3:
+                            self.tiles[x, y] = TERRAIN_GRASS
+            
+            # Place the cave entrance at the bottom of the map
+            cave_x = self.width // 2
+            cave_y = self.height - 2
+            self.tiles[cave_x, cave_y] = TERRAIN_CAVE
+            
+            # Ensure there's a path to the cave entrance
+            for y in range(cave_y - 1, 0, -1):
+                if self.tiles[cave_x, y] == TERRAIN_WALL:
+                    self.tiles[cave_x, y] = TERRAIN_GRASS
+            
+            # Place the spawn point at the top of the map
+            spawn_x = self.width // 2
+            spawn_y = 1
+            self.tiles[spawn_x, spawn_y] = TERRAIN_GRASS
+            self.spawn_point = (spawn_x, spawn_y)
+            
+            # Ensure there's a path from spawn to the first open area
+            for y in range(spawn_y + 1, self.height // 3):
+                if self.tiles[spawn_x, y] == TERRAIN_WALL:
+                    self.tiles[spawn_x, y] = TERRAIN_GRASS
+            
+            # Add some decorative elements
+            for _ in range(20):  # Add some rocks
+                x = random.randint(1, self.width - 2)
+                y = random.randint(1, self.height - 2)
+                if self.tiles[x, y] == TERRAIN_GRASS:
+                    # Check surrounding tiles to ensure we don't block paths
+                    if all(self.tiles[x + dx, y + dy] != TERRAIN_WALL 
+                          for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]
+                          if 0 <= x + dx < self.width and 0 <= y + dy < self.height):
+                        self.tiles[x, y] = TERRAIN_ROCK
+            
+            # Add some moss patches
+            for _ in range(15):
+                x = random.randint(1, self.width - 2)
+                y = random.randint(1, self.height - 2)
+                if self.tiles[x, y] == TERRAIN_GRASS:
+                    self.tiles[x, y] = TERRAIN_MOSS
+            
+            # Add some sand patches
+            for _ in range(10):
+                x = random.randint(1, self.width - 2)
+                y = random.randint(1, self.height - 2)
+                if self.tiles[x, y] == TERRAIN_GRASS:
+                    self.tiles[x, y] = TERRAIN_SAND
+            
+            return
+        
+        # For other levels, use the existing dungeon generation code
         # Generate multiple rooms
         num_rooms = random.randint(5, 8)  # Number of rooms to generate
         rooms = []
@@ -265,15 +518,15 @@ class Map:
         }
 
         # Adjust probabilities based on level
-        level_factor = min(1.0, self.level / 5.0)  # Increases with depth
+        level_factor = min(1.0, level / 5.0)  # Increases with depth
         room_types = base_room_types.copy()
         
         # Increase chances of special rooms in deeper levels
-        if self.level > 3:
+        if level > 3:
             room_types['lava'] = 0.15
             room_types['crystal'] = 0.15
             room_types['ritual'] = 0.1
-        if self.level > 6:
+        if level > 6:
             room_types['bone'] = 0.15
             room_types['fungal'] = 0.15
             room_types['treasure'] = 0.1
@@ -535,7 +788,7 @@ class Map:
                             self.tiles[x + dx, y + dy] = TERRAIN_ROCK
 
         # Place stairs based on level
-        if self.level > 0:  # Not the first level
+        if level > 0:  # Not the first level
             # Place up stairs in the first room
             if rooms:
                 room = rooms[0]
@@ -556,7 +809,7 @@ class Map:
                     if self.stairs_up:
                         break
         
-        if self.level < 9:  # Not the last level
+        if level < 9:  # Not the last level
             # Place down stairs in the last room
             if rooms:
                 room = rooms[-1]

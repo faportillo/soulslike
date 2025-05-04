@@ -6,11 +6,17 @@ class MapRenderer:
     def __init__(self, console):
         """Initialize the map renderer with a console"""
         self.console = console
+        self.game_map = None
+        self.x = 0
+        self.y = 0
 
     def render_map(self, game_map, player_x, player_y):
         """Render the game map"""
+        self.game_map = game_map
         for x in range(game_map.width):
             for y in range(game_map.height):
+                self.x = x
+                self.y = y
                 is_visible = game_map.visible[x, y]
                 is_explored = game_map.explored[x, y]
                 
@@ -42,6 +48,16 @@ class MapRenderer:
         if not visible:
             return COLOR_DARK_WALL, " "
 
+        # First check if this is a cave marker
+        if self.game_map and self.game_map.stairs_down:
+            cave_x, cave_y = self.game_map.stairs_down
+            if abs(self.x - cave_x) <= 1 and abs(self.y - cave_y) <= 1:
+                if self.x == cave_x and self.y == cave_y:
+                    return (139, 69, 19), "O"  # Brown 'O' for cave entrance
+                else:
+                    return (255, 0, 0), "0"  # Red '0' for markers
+
+        # If not a cave marker, handle normal terrain
         if terrain == TERRAIN_WALL:
             return (34, 139, 34), "#"  # Forest green for trees
         elif terrain == TERRAIN_GRASS:
@@ -54,6 +70,8 @@ class MapRenderer:
             return (0, 105, 148), "~"  # Deep blue for water
         elif terrain == TERRAIN_SAND:
             return (238, 214, 175), ","  # Sand color
+        elif terrain == TERRAIN_MOSS:
+            return (34, 139, 34), "m"  # Green for moss
         else:
             return COLOR_DARK_WALL, " "
 
